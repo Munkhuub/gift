@@ -11,6 +11,7 @@ const dataFile =
   process.env.CLIENTS_DB_FILE || path.join(__dirname, "data", "clients.sqlite");
 const seedClients = initialClients.map(normalizeClient);
 const preferredStoreProvider = process.env.STORE_PROVIDER || "";
+const isVercelRuntime = process.env.VERCEL === "1";
 const supabaseUrl = process.env.SUPABASE_URL || "";
 const supabaseServiceRoleKey =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
@@ -18,13 +19,22 @@ const supabaseServiceRoleKey =
   "";
 let db;
 let supabase;
+let memoryClients = seedClients.map(normalizeClient);
 
 function today() {
   return new Date().toISOString().split("T")[0];
 }
 
 export function getStoreProvider() {
-  return shouldUseSupabase() ? "supabase" : "sqlite";
+  if (shouldUseSupabase()) {
+    return "supabase";
+  }
+
+  if (shouldUseMemory()) {
+    return "memory";
+  }
+
+  return "sqlite";
 }
 
 function shouldUseSupabase() {
@@ -37,6 +47,14 @@ function shouldUseSupabase() {
 
 function hasSupabaseConfig() {
   return Boolean(supabaseUrl && supabaseServiceRoleKey);
+}
+
+function shouldUseMemory() {
+  if (preferredStoreProvider) {
+    return preferredStoreProvider.toLowerCase() === "memory";
+  }
+
+  return isVercelRuntime && !hasSupabaseConfig();
 }
 
 function getSupabase() {
@@ -229,6 +247,11 @@ export async function resetClientStore() {
     return seedClients.length;
   }
 
+  if (shouldUseMemory()) {
+    memoryClients = seedClients.map(normalizeClient);
+    return memoryClients.length;
+  }
+
   await fs.mkdir(path.dirname(dataFile), { recursive: true });
   const database = getDb();
   database.exec("DELETE FROM clients");
@@ -239,6 +262,10 @@ export async function resetClientStore() {
 export async function ensureClientStore() {
   if (shouldUseSupabase()) {
     await ensureSupabaseStore();
+    return;
+  }
+
+  if (shouldUseMemory()) {
     return;
   }
 
@@ -261,6 +288,10 @@ export async function listClients() {
     }
 
     return data.map(mapSupabaseRowToClient);
+  }
+
+  if (shouldUseMemory()) {
+    return memoryClients.map(normalizeClient);
   }
 
   const rows = getDb()
@@ -293,6 +324,25 @@ export async function markClientDelivered(clientId, giftDate = today()) {
     }
 
     return mapSupabaseRowToClient(data);
+  }
+
+  if (shouldUseMemory()) {
+    let updatedClient = null;
+
+    memoryClients = memoryClients.map((client) => {
+      if (client.id !== id) {
+        return client;
+      }
+
+      updatedClient = normalizeClient({
+        ...client,
+        giftDone: true,
+        giftDate,
+      });
+      return updatedClient;
+    });
+
+    return updatedClient;
   }
 
   const database = getDb();
@@ -355,6 +405,29 @@ export async function logGiftDelivery({
     }
 
     return mapSupabaseRowToClient(data);
+  }
+
+  if (shouldUseMemory()) {
+    let updatedClient = null;
+
+    memoryClients = memoryClients.map((client) => {
+      if (client.id !== id) {
+        return client;
+      }
+
+      updatedClient = normalizeClient({
+        ...client,
+        giftDone: true,
+        giftDate: nextGiftDate,
+        giftType: nextGiftType,
+        deliveredBy: nextDeliveredBy,
+        loan: Boolean(nextLoan),
+        note: nextNote,
+      });
+      return updatedClient;
+    });
+
+    return updatedClient;
   }
 
   const database = getDb();
