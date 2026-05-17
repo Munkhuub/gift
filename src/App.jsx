@@ -5,6 +5,7 @@ import LogGift from "./components/LogGift";
 import AIAssistant from "./components/AIAssistant";
 import {
   fetchClients,
+  fetchGiftHistory,
   logGiftDelivery,
   markClientDelivered,
 } from "./lib/api";
@@ -19,14 +20,24 @@ const TABS = [
 export default function App() {
   const [tab, setTab] = useState('dashboard');
   const [clients, setClients] = useState([]);
+  const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const loadClients = async () => {
+  const loadGiftHistory = async () => {
+    setHistory(await fetchGiftHistory(8));
+  };
+
+  const loadData = async () => {
     try {
       setError("");
       setLoading(true);
-      setClients(await fetchClients());
+      const [nextClients, nextHistory] = await Promise.all([
+        fetchClients(),
+        fetchGiftHistory(8),
+      ]);
+      setClients(nextClients);
+      setHistory(nextHistory);
     } catch (err) {
       setError(err.message || "Could not load clients.");
     } finally {
@@ -35,7 +46,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    loadClients();
+    loadData();
   }, []);
 
   const markDelivered = async (id) => {
@@ -45,6 +56,11 @@ export default function App() {
       setClients((current) =>
         current.map((client) => (client.id === updated.id ? updated : client)),
       );
+      try {
+        await loadGiftHistory();
+      } catch (historyError) {
+        setError(historyError.message || "Could not refresh gift history.");
+      }
       return true;
     } catch (err) {
       setError(err.message || "Could not update delivery status.");
@@ -59,6 +75,11 @@ export default function App() {
       setClients((current) =>
         current.map((client) => (client.id === updated.id ? updated : client)),
       );
+      try {
+        await loadGiftHistory();
+      } catch (historyError) {
+        setError(historyError.message || "Could not refresh gift history.");
+      }
       return true;
     } catch (err) {
       setError(err.message || "Could not save the gift record.");
@@ -112,9 +133,9 @@ export default function App() {
           </div>
         ) : (
           <>
-            {tab === 'dashboard' && <Dashboard clients={clients} onMarkDelivered={markDelivered} />}
-            {tab === 'clients' && <Clients clients={clients} />}
-            {tab === 'log' && <LogGift clients={clients} onLog={logGift} />}
+            {tab === 'dashboard' && <Dashboard clients={clients} history={history} onMarkDelivered={markDelivered} />}
+            {tab === 'clients' && <Clients initialClients={clients} />}
+            {tab === 'log' && <LogGift clients={clients} history={history} onLog={logGift} />}
             {tab === 'ai' && <AIAssistant clients={clients} />}
           </>
         )}

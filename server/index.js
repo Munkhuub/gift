@@ -7,6 +7,7 @@ import {
   askAiPayload,
   deliverClientPayload,
   getClientsPayload,
+  getGiftHistoryPayload,
   getHealthPayload,
   logGiftPayload,
 } from "./api-core.js";
@@ -27,8 +28,12 @@ function createApp() {
     res.json(await getHealthPayload());
   });
 
-  app.get("/api/clients", async (_req, res) => {
-    res.json(await getClientsPayload());
+  app.get("/api/clients", async (req, res) => {
+    res.json(await getClientsPayload(req.query));
+  });
+
+  app.get("/api/gifts/history", async (req, res) => {
+    res.json(await getGiftHistoryPayload(req.query));
   });
 
   app.patch("/api/clients/:id/deliver", async (req, res) => {

@@ -19,9 +19,29 @@ async function request(path, options = {}) {
   return payload;
 }
 
-export async function fetchClients() {
-  const payload = await request("/api/clients");
+function toQueryString(params = {}) {
+  const searchParams = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === "") {
+      continue;
+    }
+
+    searchParams.set(key, String(value));
+  }
+
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
+}
+
+export async function fetchClients(filters = {}) {
+  const payload = await request(`/api/clients${toQueryString(filters)}`);
   return payload.clients;
+}
+
+export async function fetchGiftHistory(limit = 8) {
+  const payload = await request(`/api/gifts/history${toQueryString({ limit })}`);
+  return payload.deliveries;
 }
 
 export async function markClientDelivered(id) {

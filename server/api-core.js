@@ -3,6 +3,7 @@ import {
   ensureClientStore,
   getStoreProvider,
   listClients,
+  listGiftLogs,
   logGiftDelivery,
   markClientDelivered,
 } from "./store.js";
@@ -61,9 +62,21 @@ export async function getHealthPayload() {
   return { ok: true, provider: getStoreProvider() };
 }
 
-export async function getClientsPayload() {
-  const clients = await listClients();
+export async function getClientsPayload(query = {}) {
+  const clients = await listClients({
+    tier: query.tier,
+    search: query.search,
+    status: query.status,
+  });
   return { clients };
+}
+
+export async function getGiftHistoryPayload(query = {}) {
+  const deliveries = await listGiftLogs({
+    limit: query.limit,
+  });
+
+  return { deliveries };
 }
 
 export async function deliverClientPayload(id) {

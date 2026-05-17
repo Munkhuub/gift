@@ -1,13 +1,13 @@
-import { useState } from "react";
-
 const tierColors = {
   GOD: { bg: '#FFF8ED', text: '#92400E', border: '#FCD34D' },
-  PLATINUM: { bg: '#F0F4FF', text: '#1E3A8A', border: '#93C5FD' },
-  GOLD: { bg: '#FFFBEB', text: '#78350F', border: '#FDE68A' },
+  KING: { bg: '#F0F4FF', text: '#1E3A8A', border: '#93C5FD' },
+  BOSS: { bg: '#FFFBEB', text: '#78350F', border: '#FDE68A' },
+  STAR: { bg: '#F8FAFC', text: '#475569', border: '#CBD5E1' },
+  FAN: { bg: '#FEF2F2', text: '#DC2626', border: '#FECACA' },
   SILVER: { bg: '#F8FAFC', text: '#475569', border: '#CBD5E1' },
 };
 
-export default function Dashboard({ clients, onMarkDelivered }) {
+export default function Dashboard({ clients, history, onMarkDelivered }) {
   const pending = clients.filter(c => !c.giftDone);
   const done = clients.filter(c => c.giftDone);
   const godPending = clients.filter(c => c.tier === 'GOD' && !c.giftDone);
@@ -75,6 +75,75 @@ export default function Dashboard({ clients, onMarkDelivered }) {
           </tbody>
         </table>
       )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 0.9fr', gap: 18, marginTop: 28 }}>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
+            Recent delivery history
+          </div>
+          <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden' }}>
+            {history.length === 0 ? (
+              <div style={{ padding: 20, fontSize: 13, color: '#94A3B8' }}>
+                No delivery history yet.
+              </div>
+            ) : (
+              history.map((entry, index) => {
+                const tc = tierColors[entry.tier] || tierColors.SILVER;
+                return (
+                  <div
+                    key={entry.id}
+                    style={{
+                      padding: '14px 16px',
+                      borderTop: index === 0 ? 'none' : '1px solid #F1F5F9',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#1E293B', marginBottom: 4 }}>
+                        {entry.clientName}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#64748B', marginBottom: 6 }}>
+                        {entry.giftType}
+                        {entry.deliveredBy ? ` • ${entry.deliveredBy}` : ""}
+                      </div>
+                      {entry.note && (
+                        <div style={{ fontSize: 12, color: '#475569' }}>{entry.note}</div>
+                      )}
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 12, color: '#64748B', marginBottom: 6 }}>{entry.deliveredAt}</div>
+                      <span style={{ background: tc.bg, color: tc.text, border: `1px solid ${tc.border}`, borderRadius: 99, padding: '3px 10px', fontSize: 11, fontWeight: 600 }}>
+                        {entry.tier}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
+            Delivery pace
+          </div>
+          <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 12, padding: 18 }}>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+                Completion rate
+              </div>
+              <div style={{ fontSize: 28, fontWeight: 600, color: '#1E293B' }}>
+                {clients.length ? Math.round((done.length / clients.length) * 100) : 0}%
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.7 }}>
+              {history.length} recent delivery record{history.length === 1 ? '' : 's'} are available from Prisma gift logs.
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-export default function LogGift({ clients, onLog }) {
+export default function LogGift({ clients, history, onLog }) {
   const [form, setForm] = useState({ clientId: '', date: new Date().toISOString().split('T')[0], type: '', deliveredBy: '', loan: false, note: '' });
   const [success, setSuccess] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -97,6 +97,37 @@ export default function LogGift({ clients, onLog }) {
 
       <div style={{ marginTop: 16, background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#1D4ED8', display: 'flex', gap: 8, alignItems: 'center', maxWidth: 560 }}>
         🔒 <span>Gift records are now saved through your app backend, so the data persists instead of resetting on refresh.</span>
+      </div>
+
+      <div style={{ marginTop: 20, maxWidth: 560 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+          Recent gift log records
+        </div>
+        <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden' }}>
+          {history.length === 0 ? (
+            <div style={{ padding: 14, fontSize: 12, color: '#94A3B8' }}>
+              No gift logs saved yet.
+            </div>
+          ) : (
+            history.slice(0, 5).map((entry, index) => (
+              <div
+                key={entry.id}
+                style={{
+                  padding: '12px 14px',
+                  borderTop: index === 0 ? 'none' : '1px solid #F1F5F9',
+                }}
+              >
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#1E293B', marginBottom: 4 }}>
+                  {entry.clientName}
+                </div>
+                <div style={{ fontSize: 12, color: '#64748B' }}>
+                  {entry.deliveredAt} • {entry.giftType}
+                  {entry.deliveredBy ? ` • ${entry.deliveredBy}` : ""}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );

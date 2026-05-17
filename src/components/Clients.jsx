@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { startTransition, useDeferredValue, useEffect, useState } from "react";
+import { fetchClients } from "../lib/api";
 
 const tierColors = {
   GOD: { bg: "#FFF8ED", text: "#92400E", border: "#FCD34D" },
@@ -6,19 +7,65 @@ const tierColors = {
   BOSS: { bg: "#FFFBEB", text: "#78350F", border: "#FDE68A" },
   STAR: { bg: "#F8FAFC", text: "#475569", border: "#CBD5E1" },
   FAN: { bg: "#FEF2F2", text: "#DC2626", border: "#FECACA" },
+  SILVER: { bg: "#F8FAFC", text: "#475569", border: "#CBD5E1" },
 };
 
-export default function Clients({ clients }) {
+export default function Clients({ initialClients }) {
   const [filter, setFilter] = useState("ALL");
   const [search, setSearch] = useState("");
+  const [clients, setClients] = useState(initialClients);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const deferredSearch = useDeferredValue(search.trim());
 
-  const filtered = clients
-    .filter((c) => filter === "ALL" || c.tier === filter)
-    .filter(
-      (c) =>
-        !search ||
-        `${c.last} ${c.first}`.toLowerCase().includes(search.toLowerCase()),
-    );
+  useEffect(() => {
+    if (filter === "ALL" && !deferredSearch) {
+      setClients(initialClients);
+    }
+  }, [initialClients, filter, deferredSearch]);
+
+  useEffect(() => {
+    if (filter === "ALL" && !deferredSearch) {
+      return;
+    }
+
+    let active = true;
+
+    async function loadFilteredClients() {
+      try {
+        setLoading(true);
+        setError("");
+        const filteredClients = await fetchClients({
+          tier: filter === "ALL" ? undefined : filter,
+          search: deferredSearch || undefined,
+        });
+
+        if (!active) {
+          return;
+        }
+
+        startTransition(() => {
+          setClients(filteredClients);
+        });
+      } catch (loadError) {
+        if (!active) {
+          return;
+        }
+
+        setError(loadError.message || "Could not load filtered clients.");
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadFilteredClients();
+
+    return () => {
+      active = false;
+    };
+  }, [deferredSearch, filter]);
 
   return (
     <div>
@@ -61,6 +108,27 @@ export default function Clients({ clients }) {
         ))}
       </div>
 
+      {loading && (
+        <div style={{ marginBottom: 12, fontSize: 12, color: "#64748B" }}>
+          Loading filtered clients...
+        </div>
+      )}
+      {error && (
+        <div
+          style={{
+            marginBottom: 12,
+            background: "#FEF2F2",
+            border: "1px solid #FECACA",
+            borderRadius: 8,
+            padding: "10px 12px",
+            fontSize: 12,
+            color: "#B91C1C",
+          }}
+        >
+          {error}
+        </div>
+      )}
+
       <table
         style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}
       >
@@ -94,7 +162,7 @@ export default function Clients({ clients }) {
           </tr>
         </thead>
         <tbody>
-          {filtered.map((c, i) => {
+          {clients.map((c, i) => {
             const tc = tierColors[c.tier] || tierColors.SILVER;
             return (
               <tr key={c.id} style={{ borderBottom: "1px solid #F1F5F9" }}>
@@ -193,7 +261,7 @@ export default function Clients({ clients }) {
           })}
         </tbody>
       </table>
-      {filtered.length === 0 && (
+      {clients.length === 0 && (
         <div
           style={{
             textAlign: "center",

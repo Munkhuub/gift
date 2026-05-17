@@ -22,3 +22,12 @@ export function sendJson(res, status, body) {
   res.setHeader("Content-Type", "application/json");
   res.end(JSON.stringify(body));
 }
+
+export function parseQuery(req) {
+  if (req.query && typeof req.query === "object") {
+    return req.query;
+  }
+
+  const url = new URL(req.url || "/", "http://localhost");
+  return Object.fromEntries(url.searchParams.entries());
+}

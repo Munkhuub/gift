@@ -1,0 +1,49 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Starter models — replace with your own
+model Client {
+  id          Int       @id @default(autoincrement())
+  firstName   String
+  lastName    String
+  phoneMasked String    @unique
+  tier        Tier      @default(FAN)
+  giftDone    Boolean   @default(false)
+  giftDate    DateTime?
+  hasLoan     Boolean   @default(false)
+  note        String    @default("")
+  giftType    String    @default("")
+  deliveredBy String    @default("")
+  gifts       GiftLog[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("clients")
+}
+
+model GiftLog {
+  id          Int      @id @default(autoincrement())
+  clientId    Int
+  giftType    String
+  deliveredBy String?
+  note        String   @default("")
+  deliveredAt DateTime @default(now())
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@map("gift_logs")
+}
+
+enum Tier {
+  GOD
+  KING
+  BOSS
+  STAR
+  FAN
+}
