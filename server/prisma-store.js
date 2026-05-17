@@ -1,4 +1,4 @@
-import { prisma } from "../lib/prisma.ts";
+import { prisma } from "../lib/prisma.js";
 import { reseedPrisma } from "../prisma/seed-data.js";
 import { normalizeClient } from "../src/data/clients.js";
 import { TIERS } from "../src/data/clients.js";

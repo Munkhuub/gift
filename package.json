@@ -5,16 +5,17 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:server": "node --import tsx server/index.js",
-    "seed": "node --import tsx server/seed.js",
+    "dev:server": "node server/index.js",
+    "seed": "node server/seed.js",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
-    "db:verify": "node --import tsx scripts/verify-prisma.ts",
+    "db:verify": "node scripts/verify-prisma.js",
+    "postinstall": "prisma generate",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "node --import tsx server/index.js"
+    "start": "node server/index.js"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",
