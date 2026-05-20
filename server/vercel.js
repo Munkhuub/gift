@@ -23,6 +23,26 @@ export function sendJson(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
+export function sendError(res, error) {
+  const message =
+    error instanceof Error
+      ? error.message || "Internal server error."
+      : "Internal server error.";
+
+  sendJson(res, 500, { error: message });
+}
+
+export function withErrorHandling(handler) {
+  return async function wrappedHandler(req, res) {
+    try {
+      await handler(req, res);
+    } catch (error) {
+      console.error(error);
+      sendError(res, error);
+    }
+  };
+}
+
 export function parseQuery(req) {
   if (req.query && typeof req.query === "object") {
     return req.query;
