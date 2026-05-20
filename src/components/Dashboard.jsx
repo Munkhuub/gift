@@ -227,7 +227,7 @@ export default function Dashboard({ clients, history, onMarkDelivered }) {
               marginBottom: 12,
             }}
           >
-            Recent delivery history.
+            Recent delivery history
           </div>
           <div
             style={{

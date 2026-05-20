@@ -9,11 +9,20 @@ async function request(path, options = {}) {
     },
   });
 
-  const isJson = response.headers.get("content-type")?.includes("application/json");
+  const contentType = response.headers.get("content-type") || "";
+  const isJson = contentType.includes("application/json");
   const payload = isJson ? await response.json() : null;
+  const fallbackText =
+    !isJson && response.status !== 204 ? (await response.text()).trim() : "";
 
   if (!response.ok) {
-    throw new Error(payload?.error || "Request failed.");
+    const message =
+      payload?.error ||
+      fallbackText ||
+      `Request failed with status ${response.status}.`;
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
   }
 
   return payload;

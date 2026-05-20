@@ -32,14 +32,40 @@ export default function App() {
     try {
       setError("");
       setLoading(true);
-      const [nextClients, nextHistory] = await Promise.all([
+      const [clientsResult, historyResult] = await Promise.allSettled([
         fetchClients(),
         fetchGiftHistory(8),
       ]);
-      setClients(nextClients);
-      setHistory(nextHistory);
+
+      if (clientsResult.status === "fulfilled") {
+        setClients(clientsResult.value);
+      } else {
+        setClients([]);
+      }
+
+      if (historyResult.status === "fulfilled") {
+        setHistory(historyResult.value);
+      } else {
+        setHistory([]);
+      }
+
+      const errors = [];
+
+      if (clientsResult.status === "rejected") {
+        errors.push(
+          `Clients API: ${clientsResult.reason?.message || "Could not load clients."}`,
+        );
+      }
+
+      if (historyResult.status === "rejected") {
+        errors.push(
+          `History API: ${historyResult.reason?.message || "Could not load history."}`,
+        );
+      }
+
+      setError(errors.join(" "));
     } catch (err) {
-      setError(err.message || "Could not load clients.");
+      setError(err.message || "Could not load app data.");
     } finally {
       setLoading(false);
     }
@@ -130,6 +156,10 @@ export default function App() {
         {loading ? (
           <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: 32, textAlign: 'center', color: '#64748B', fontSize: 14 }}>
             Loading client data...
+          </div>
+        ) : clients.length === 0 && !error ? (
+          <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: 32, textAlign: 'center', color: '#64748B', fontSize: 14 }}>
+            No client data is available yet.
           </div>
         ) : (
           <>
