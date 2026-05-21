@@ -1,3 +1,6 @@
+import { useEffect, useState } from "react";
+import { fetchGiftHistory } from "../lib/api";
+
 const tierColors = {
   GOD: { bg: "#FFF8ED", text: "#92400E", border: "#FCD34D" },
   KING: { bg: "#F0F4FF", text: "#1E3A8A", border: "#93C5FD" },
@@ -10,11 +13,57 @@ const tierColors = {
 export default function Dashboard({ clients, history, onMarkDelivered }) {
   const pending = clients.filter((c) => !c.giftDone);
   const done = clients.filter((c) => c.giftDone);
-  const godPending = clients.filter((c) => c.tier === "GOD" && !c.giftDone);
+  const withLoan = clients.filter((c) => c.loan);
+  const [historyDate, setHistoryDate] = useState("");
+  const [historyItems, setHistoryItems] = useState(history);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadHistory() {
+      if (!historyDate) {
+        setHistoryItems(history);
+        setHistoryError("");
+        setHistoryLoading(false);
+        return;
+      }
+
+      try {
+        setHistoryLoading(true);
+        setHistoryError("");
+        const filteredHistory = await fetchGiftHistory({
+          limit: 20,
+          date: historyDate,
+        });
+
+        if (active) {
+          setHistoryItems(filteredHistory);
+        }
+      } catch (error) {
+        if (active) {
+          setHistoryError(
+            error.message || "Could not load filtered GOD-tier history.",
+          );
+        }
+      } finally {
+        if (active) {
+          setHistoryLoading(false);
+        }
+      }
+    }
+
+    loadHistory();
+
+    return () => {
+      active = false;
+    };
+  }, [history, historyDate]);
 
   return (
     <div>
-      {godPending.length > 0 && (
+      {pending.length > 0 && (
         <div
           style={{
             background: "#FEF3C7",
@@ -32,8 +81,8 @@ export default function Dashboard({ clients, history, onMarkDelivered }) {
           <span style={{ fontSize: 18 }}>⚠️</span>
           <span>
             <strong>
-              {godPending.length} GOD-tier client
-              {godPending.length > 1 ? "s" : ""}
+              {pending.length} GOD-tier client
+              {pending.length > 1 ? "s" : ""}
             </strong>{" "}
             have not received gifts yet — immediate action needed.
           </span>
@@ -49,17 +98,25 @@ export default function Dashboard({ clients, history, onMarkDelivered }) {
         }}
       >
         {[
-          { label: "Total clients", value: clients.length, color: "#1E293B" },
           {
-            label: "Gifts pending",
+            label: "Total GOD clients",
+            value: clients.length,
+            color: "#1E293B",
+          },
+          {
+            label: "Pending GOD gifts",
             value: pending.length,
             color: pending.length > 0 ? "#DC2626" : "#16A34A",
           },
-          { label: "Gifts delivered", value: done.length, color: "#16A34A" },
           {
-            label: "GOD tier pending",
-            value: godPending.length,
-            color: godPending.length > 0 ? "#D97706" : "#16A34A",
+            label: "Delivered GOD gifts",
+            value: done.length,
+            color: "#16A34A",
+          },
+          {
+            label: "GOD clients with loans",
+            value: withLoan.length,
+            color: withLoan.length > 0 ? "#D97706" : "#16A34A",
           },
         ].map((m) => (
           <div
@@ -99,7 +156,7 @@ export default function Dashboard({ clients, history, onMarkDelivered }) {
           marginBottom: 12,
         }}
       >
-        Pending deliveries
+        Pending GOD deliveries
       </div>
       {pending.length === 0 ? (
         <div
@@ -113,7 +170,7 @@ export default function Dashboard({ clients, history, onMarkDelivered }) {
             border: "1px solid #BBF7D0",
           }}
         >
-          ✅ All gifts have been delivered!
+          ✅ All GOD-tier gifts have been delivered!
         </div>
       ) : (
         <table
@@ -231,18 +288,82 @@ export default function Dashboard({ clients, history, onMarkDelivered }) {
           </div>
           <div
             style={{
+              display: "flex",
+              gap: 8,
+              alignItems: "center",
+              marginBottom: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <input
+              type="date"
+              value={historyDate}
+              onChange={(e) => setHistoryDate(e.target.value)}
+              style={{
+                fontSize: 12,
+                padding: "8px 10px",
+                border: "1px solid #E2E8F0",
+                borderRadius: 8,
+                background: "#fff",
+                color: "#1E293B",
+              }}
+            />
+            <button
+              onClick={() =>
+                setHistoryDate(new Date().toISOString().split("T")[0])
+              }
+              style={{
+                fontSize: 12,
+                padding: "8px 12px",
+                border: "1px solid #E2E8F0",
+                borderRadius: 8,
+                background: "#fff",
+                color: "#475569",
+                cursor: "pointer",
+              }}
+            >
+              Today
+            </button>
+            <button
+              onClick={() => setHistoryDate("")}
+              style={{
+                fontSize: 12,
+                padding: "8px 12px",
+                border: "1px solid #E2E8F0",
+                borderRadius: 8,
+                background: "#fff",
+                color: "#475569",
+                cursor: "pointer",
+              }}
+            >
+              Clear
+            </button>
+            <span style={{ fontSize: 12, color: "#64748B" }}>
+              Filter GOD-tier delivery history by exact day.
+            </span>
+          </div>
+          <div
+            style={{
               background: "#fff",
               border: "1px solid #E2E8F0",
               borderRadius: 12,
               overflow: "hidden",
             }}
           >
-            {history.length === 0 ? (
+            {historyLoading ? (
+              <div style={{ padding: 20, fontSize: 13, color: "#64748B" }}>
+                Loading filtered GOD-tier history...
+              </div>
+            ) : historyError ? (
+              <div style={{ padding: 20, fontSize: 13, color: "#B91C1C" }}>
+                {historyError}
+              </div>
+            ) : historyItems.length === 0 ? (
               <div style={{ padding: 20, fontSize: 13, color: "#94A3B8" }}>
-                No delivery history yet.
+                No GOD-tier delivery history matched that day.
               </div>
             ) : (
-              history.map((entry, index) => {
+              historyItems.map((entry, index) => {
                 const tc = tierColors[entry.tier] || tierColors.SILVER;
                 return (
                   <div
@@ -354,9 +475,9 @@ export default function Dashboard({ clients, history, onMarkDelivered }) {
               </div>
             </div>
             <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.7 }}>
-              {history.length} recent delivery record
-              {history.length === 1 ? "" : "s"} are available from Prisma gift
-              logs.
+              {historyItems.length} GOD-tier delivery record
+              {historyItems.length === 1 ? "" : "s"} currently match the
+              selected history view.
             </div>
           </div>
         </div>

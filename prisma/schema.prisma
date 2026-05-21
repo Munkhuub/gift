@@ -39,10 +39,46 @@ model GiftLog {
   @@map("gift_logs")
 }
 
+model MarketingResource {
+  id           Int                     @id @default(autoincrement())
+  name         String
+  campaign     String                  @default("")
+  resourceType MarketingResourceType
+  owner        String                  @default("")
+  status       MarketingResourceStatus @default(REQUESTED)
+  quantity     Int?
+  budget       Float?
+  neededBy     DateTime?
+  vendor       String                  @default("")
+  note         String                  @default("")
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+
+  @@index([status])
+  @@index([resourceType])
+  @@index([neededBy])
+  @@map("marketing_resources")
+}
+
 enum Tier {
   GOD
   KING
   BOSS
   STAR
   FAN
+}
+
+enum MarketingResourceType {
+  MERCH
+  CREATIVE
+  BUDGET
+  STAFF
+  CHANNEL
+}
+
+enum MarketingResourceStatus {
+  REQUESTED
+  IN_PROGRESS
+  READY
+  DEPLOYED
 }

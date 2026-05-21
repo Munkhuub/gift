@@ -11,21 +11,22 @@ const tierColors = {
 };
 
 export default function Clients({ initialClients }) {
-  const [filter, setFilter] = useState("ALL");
+  const [status, setStatus] = useState("ALL");
   const [search, setSearch] = useState("");
+  const [giftDate, setGiftDate] = useState("");
   const [clients, setClients] = useState(initialClients);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const deferredSearch = useDeferredValue(search.trim());
 
   useEffect(() => {
-    if (filter === "ALL" && !deferredSearch) {
+    if (status === "ALL" && !deferredSearch && !giftDate) {
       setClients(initialClients);
     }
-  }, [initialClients, filter, deferredSearch]);
+  }, [initialClients, status, deferredSearch, giftDate]);
 
   useEffect(() => {
-    if (filter === "ALL" && !deferredSearch) {
+    if (status === "ALL" && !deferredSearch && !giftDate) {
       return;
     }
 
@@ -36,8 +37,9 @@ export default function Clients({ initialClients }) {
         setLoading(true);
         setError("");
         const filteredClients = await fetchClients({
-          tier: filter === "ALL" ? undefined : filter,
           search: deferredSearch || undefined,
+          status: status === "ALL" ? undefined : status,
+          giftDate: giftDate || undefined,
         });
 
         if (!active) {
@@ -65,17 +67,36 @@ export default function Clients({ initialClients }) {
     return () => {
       active = false;
     };
-  }, [deferredSearch, filter]);
+  }, [deferredSearch, giftDate, status]);
+
+  const hasFilters = status !== "ALL" || Boolean(deferredSearch) || Boolean(giftDate);
 
   return (
     <div>
+      <div
+        style={{
+          marginBottom: 14,
+          background: "#FFF8ED",
+          border: "1px solid #FCD34D",
+          borderRadius: 10,
+          padding: "10px 14px",
+          fontSize: 12,
+          color: "#92400E",
+          display: "flex",
+          gap: 8,
+          alignItems: "center",
+        }}
+      >
+        👑 <span>This registry is focused on GOD-tier clients only. Use search, status, and delivery day filters to narrow the VIP portfolio quickly.</span>
+      </div>
+
       <div
         style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" }}
       >
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name..."
+          placeholder="Search GOD clients..."
           style={{
             flex: 1,
             minWidth: 180,
@@ -87,10 +108,23 @@ export default function Clients({ initialClients }) {
             color: "#1E293B",
           }}
         />
-        {["ALL", "GOD", "KING", "BOSS", "STAR", "FAN"].map((t) => (
+        <input
+          type="date"
+          value={giftDate}
+          onChange={(e) => setGiftDate(e.target.value)}
+          style={{
+            fontSize: 13,
+            padding: "8px 12px",
+            border: "1px solid #E2E8F0",
+            borderRadius: 8,
+            background: "#fff",
+            color: "#1E293B",
+          }}
+        />
+        {["ALL", "pending", "delivered"].map((value) => (
           <button
-            key={t}
-            onClick={() => setFilter(t)}
+            key={value}
+            onClick={() => setStatus(value)}
             style={{
               fontSize: 12,
               padding: "7px 14px",
@@ -98,19 +132,46 @@ export default function Clients({ initialClients }) {
               cursor: "pointer",
               fontWeight: 500,
               border:
-                filter === t ? "1.5px solid #1E293B" : "1px solid #E2E8F0",
-              background: filter === t ? "#1E293B" : "#fff",
-              color: filter === t ? "#fff" : "#64748B",
+                status === value
+                  ? "1.5px solid #1E293B"
+                  : "1px solid #E2E8F0",
+              background: status === value ? "#1E293B" : "#fff",
+              color: status === value ? "#fff" : "#64748B",
             }}
           >
-            {t}
+            {value === "ALL"
+              ? "All"
+              : value === "pending"
+                ? "Pending"
+                : "Delivered"}
           </button>
         ))}
+        <button
+          onClick={() => {
+            setSearch("");
+            setStatus("ALL");
+            setGiftDate("");
+          }}
+          disabled={!hasFilters}
+          style={{
+            fontSize: 12,
+            padding: "7px 14px",
+            borderRadius: 8,
+            cursor: hasFilters ? "pointer" : "not-allowed",
+            fontWeight: 500,
+            border: "1px solid #E2E8F0",
+            background: "#fff",
+            color: "#64748B",
+            opacity: hasFilters ? 1 : 0.5,
+          }}
+        >
+          Clear
+        </button>
       </div>
 
       {loading && (
         <div style={{ marginBottom: 12, fontSize: 12, color: "#64748B" }}>
-          Loading filtered clients...
+          Loading GOD-tier clients...
         </div>
       )}
       {error && (
@@ -126,6 +187,21 @@ export default function Clients({ initialClients }) {
           }}
         >
           {error}
+        </div>
+      )}
+      {!loading && !error && clients.length === 0 && (
+        <div
+          style={{
+            marginBottom: 16,
+            background: "#F8FAFC",
+            border: "1px solid #E2E8F0",
+            borderRadius: 10,
+            padding: "14px 16px",
+            fontSize: 13,
+            color: "#64748B",
+          }}
+        >
+          No GOD-tier clients matched the current filters.
         </div>
       )}
 

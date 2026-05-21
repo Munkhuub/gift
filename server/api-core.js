@@ -1,16 +1,24 @@
 import { getAISafeSummary } from "../src/data/clients.js";
 import {
+  createMarketingResource,
   ensureClientStore,
   getStoreProvider,
   listClients,
   listGiftLogs,
+  listMarketingResources,
   logGiftDelivery,
   markClientDelivered,
+  updateMarketingResource,
 } from "./store.js";
+import {
+  MARKETING_RESOURCE_STATUSES,
+  MARKETING_RESOURCE_TYPES,
+} from "../src/data/marketingResources.js";
 
-const SYSTEM_PROMPT_BASE = `You are an AI assistant for an internal client gift tracking system at a Mongolian financial company. You help Sales, Marketing, and Finance teams monitor gift delivery status. No personal client data is shared — you only receive aggregated totals. Answer questions helpfully based only on the summary provided. For Finance summaries, use a professional format. If asked for individual client details, explain that personal data is kept private. Respond in the same language the user uses (Mongolian or English). Be concise and direct.`;
+const SYSTEM_PROMPT_BASE = `You are an AI assistant for an internal GOD-tier client gift tracking system at a Mongolian financial company. You help Sales, Marketing, and Finance teams monitor VIP gift delivery status. No personal client data is shared — you only receive aggregated totals. Answer questions helpfully based only on the summary provided. For Finance summaries, use a professional format. If asked for individual client details, explain that personal data is kept private and that the workflow is limited to GOD-tier portfolio insights. Respond in the same language the user uses (Mongolian or English). Be concise and direct.`;
 const ANTHROPIC_MODEL =
   process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
+const FOCUS_TIER = "GOD";
 
 function buildUpstreamError(provider, response, data) {
   const message =
@@ -66,9 +74,12 @@ export async function getHealthPayload() {
 
 export async function getClientsPayload(query = {}) {
   const clients = await listClients({
-    tier: query.tier,
+    tier: FOCUS_TIER,
     search: query.search,
     status: query.status,
+    giftDate: query.giftDate,
+    dateFrom: query.dateFrom,
+    dateTo: query.dateTo,
   });
   return { clients };
 }
@@ -76,6 +87,10 @@ export async function getClientsPayload(query = {}) {
 export async function getGiftHistoryPayload(query = {}) {
   const deliveries = await listGiftLogs({
     limit: query.limit,
+    tier: FOCUS_TIER,
+    date: query.date,
+    dateFrom: query.dateFrom,
+    dateTo: query.dateTo,
   });
   return { deliveries };
 }
@@ -86,6 +101,87 @@ export async function deliverClientPayload(id) {
     return { status: 404, body: { error: "Client not found." } };
   }
   return { status: 200, body: { client } };
+}
+
+export async function getMarketingResourcesPayload(query = {}) {
+  const resources = await listMarketingResources({
+    status: query.status,
+    resourceType: query.resourceType,
+    search: query.search,
+    neededBy: query.neededBy,
+    dateFrom: query.dateFrom,
+    dateTo: query.dateTo,
+  });
+
+  return { resources };
+}
+
+export async function createMarketingResourcePayload(payload) {
+  const {
+    name,
+    campaign,
+    resourceType,
+    owner,
+    status,
+    quantity,
+    budget,
+    neededBy,
+    vendor,
+    note,
+  } = payload || {};
+
+  if (!name?.trim()) {
+    return { status: 400, body: { error: "name is required." } };
+  }
+
+  const normalizedType = String(resourceType || "").toUpperCase();
+  const normalizedStatus = String(status || "REQUESTED").toUpperCase();
+
+  if (!MARKETING_RESOURCE_TYPES.includes(normalizedType)) {
+    return { status: 400, body: { error: "resourceType is invalid." } };
+  }
+
+  if (!MARKETING_RESOURCE_STATUSES.includes(normalizedStatus)) {
+    return { status: 400, body: { error: "status is invalid." } };
+  }
+
+  const resource = await createMarketingResource({
+    name,
+    campaign,
+    resourceType: normalizedType,
+    owner,
+    status: normalizedStatus,
+    quantity,
+    budget,
+    neededBy,
+    vendor,
+    note,
+  });
+
+  return { status: 200, body: { resource } };
+}
+
+export async function updateMarketingResourcePayload(id, payload) {
+  const normalizedStatus =
+    typeof payload?.status === "string" ? payload.status.toUpperCase() : undefined;
+
+  if (
+    normalizedStatus &&
+    !MARKETING_RESOURCE_STATUSES.includes(normalizedStatus)
+  ) {
+    return { status: 400, body: { error: "status is invalid." } };
+  }
+
+  const resource = await updateMarketingResource(id, {
+    ...payload,
+    status: normalizedStatus,
+  });
+
+  if (!resource) {
+    return { status: 404, body: { error: "Marketing resource not found." } };
+  }
+
+  return { status: 200, body: { resource } };
 }
 
 export async function logGiftPayload(payload) {
@@ -119,7 +215,7 @@ export async function askAiPayload(payload) {
   }
 
   try {
-    const clients = await listClients();
+    const clients = await listClients({ tier: FOCUS_TIER });
     const text = await askAI(question, clients);
     return { status: 200, body: { text } };
   } catch (error) {

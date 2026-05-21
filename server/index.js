@@ -5,11 +5,14 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import {
   askAiPayload,
+  createMarketingResourcePayload,
   deliverClientPayload,
   getClientsPayload,
   getGiftHistoryPayload,
   getHealthPayload,
+  getMarketingResourcesPayload,
   logGiftPayload,
+  updateMarketingResourcePayload,
 } from "./api-core.js";
 import { ensureClientStore } from "./store.js";
 
@@ -36,13 +39,30 @@ function createApp() {
     res.json(await getGiftHistoryPayload(req.query));
   });
 
+  app.get("/api/marketing/resources", async (req, res) => {
+    res.json(await getMarketingResourcesPayload(req.query));
+  });
+
   app.patch("/api/clients/:id/deliver", async (req, res) => {
     const result = await deliverClientPayload(req.params.id);
     res.status(result.status).json(result.body);
   });
 
+  app.patch("/api/marketing/resources/:id", async (req, res) => {
+    const result = await updateMarketingResourcePayload(
+      req.params.id,
+      req.body,
+    );
+    res.status(result.status).json(result.body);
+  });
+
   app.post("/api/gifts", async (req, res) => {
     const result = await logGiftPayload(req.body);
+    res.status(result.status).json(result.body);
+  });
+
+  app.post("/api/marketing/resources", async (req, res) => {
+    const result = await createMarketingResourcePayload(req.body);
     res.status(result.status).json(result.body);
   });
 

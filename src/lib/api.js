@@ -48,9 +48,17 @@ export async function fetchClients(filters = {}) {
   return payload.clients;
 }
 
-export async function fetchGiftHistory(limit = 8) {
-  const payload = await request(`/api/gifts/history${toQueryString({ limit })}`);
+export async function fetchGiftHistory(options = 8) {
+  const params = typeof options === "number" ? { limit: options } : options;
+  const payload = await request(`/api/gifts/history${toQueryString(params)}`);
   return payload.deliveries;
+}
+
+export async function fetchMarketingResources(filters = {}) {
+  const payload = await request(
+    `/api/marketing/resources${toQueryString(filters)}`,
+  );
+  return payload.resources;
 }
 
 export async function markClientDelivered(id) {
@@ -74,4 +82,20 @@ export async function askAssistant(question) {
     body: JSON.stringify({ question }),
   });
   return payload.text;
+}
+
+export async function createMarketingResource(resource) {
+  const payload = await request("/api/marketing/resources", {
+    method: "POST",
+    body: JSON.stringify(resource),
+  });
+  return payload.resource;
+}
+
+export async function updateMarketingResource(id, updates) {
+  const payload = await request(`/api/marketing/resources/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(updates),
+  });
+  return payload.resource;
 }

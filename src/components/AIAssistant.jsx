@@ -2,17 +2,17 @@ import { useState, useRef, useEffect } from "react";
 import { askAssistant } from "../lib/api";
 
 const QUICK = [
-  "Which tier has the most pending gifts?",
-  "Give me a Finance summary report",
-  "What percentage of gifts are delivered?",
-  "Which tier should we prioritize?",
+  "How many GOD-tier gifts are still pending?",
+  "Give me a VIP finance summary report",
+  "What percentage of GOD-tier gifts are delivered?",
+  "What should we prioritize for GOD-tier clients?",
 ];
 
 export default function AIAssistant() {
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      text: "Hello! I can answer questions about your gift delivery status. I only use aggregated, anonymized data — no personal client information is ever sent to the AI.",
+      text: "Hello! I can answer questions about your GOD-tier gift delivery status. I only use aggregated, anonymized data — no personal client information is ever sent to the AI.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -71,7 +71,7 @@ export default function AIAssistant() {
         🔒{" "}
         <span>
           <strong>Privacy-safe:</strong> The browser sends your question to the
-          app backend, and only aggregated totals are forwarded to the AI.
+          app backend, and only aggregated GOD-tier totals are forwarded to the AI.
         </span>
       </div>
 
@@ -104,7 +104,7 @@ export default function AIAssistant() {
               marginLeft: 4,
             }}
           >
-            Aggregated data only
+            GOD-tier aggregated data only
           </span>
         </div>
 
@@ -209,7 +209,7 @@ export default function AIAssistant() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && send()}
-            placeholder="Ask about gift delivery status..."
+            placeholder="Ask about GOD-tier delivery status..."
             disabled={loading}
             style={{
               flex: 1,
