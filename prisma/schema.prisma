@@ -8,20 +8,27 @@ datasource db {
 
 // Starter models — replace with your own
 model Client {
-  id          Int       @id @default(autoincrement())
-  firstName   String
-  lastName    String
-  phoneMasked String    @unique
-  tier        Tier      @default(FAN)
-  giftDone    Boolean   @default(false)
-  giftDate    DateTime?
-  hasLoan     Boolean   @default(false)
-  note        String    @default("")
-  giftType    String    @default("")
-  deliveredBy String    @default("")
-  gifts       GiftLog[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id                    Int                    @id @default(autoincrement())
+  firstName             String
+  lastName              String
+  phoneMasked           String                 @unique
+  tier                  Tier                   @default(FAN)
+  previousTier          Tier?
+  giftDone              Boolean                @default(false)
+  giftStillOwed         Boolean                @default(false)
+  giftEligibilityStatus GiftEligibilityStatus  @default(PENDING)
+  giftDate              DateTime?
+  hasLoan               Boolean                @default(false)
+  loanOverdueDays       Int                    @default(0)
+  isWaitlist            Boolean                @default(false)
+  tierChangedAt         DateTime?
+  statusReason          String                 @default("")
+  note                  String                 @default("")
+  giftType              String                 @default("")
+  deliveredBy           String                 @default("")
+  gifts                 GiftLog[]
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
 
   @@map("clients")
 }
@@ -39,25 +46,37 @@ model GiftLog {
   @@map("gift_logs")
 }
 
-model MarketingResource {
-  id           Int                     @id @default(autoincrement())
-  name         String
-  campaign     String                  @default("")
-  resourceType MarketingResourceType
-  owner        String                  @default("")
-  status       MarketingResourceStatus @default(REQUESTED)
-  quantity     Int?
-  budget       Float?
-  neededBy     DateTime?
-  vendor       String                  @default("")
-  note         String                  @default("")
-  createdAt    DateTime                @default(now())
-  updatedAt    DateTime                @updatedAt
+model MarketingMerchItem {
+  id              Int                   @id @default(autoincrement())
+  name            String
+  category        MerchCategory
+  unit            String                @default("pcs")
+  totalStock      Int                   @default(0)
+  issuedStock     Int                   @default(0)
+  storageLocation String                @default("")
+  note            String                @default("")
+  issues          MarketingMerchIssue[]
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
 
-  @@index([status])
-  @@index([resourceType])
-  @@index([neededBy])
-  @@map("marketing_resources")
+  @@index([category])
+  @@map("marketing_merch_items")
+}
+
+model MarketingMerchIssue {
+  id            Int                @id @default(autoincrement())
+  itemId        Int
+  quantity      Int
+  recipientName String             @default("")
+  purpose       String             @default("")
+  issuedBy      String             @default("")
+  issuedAt      DateTime           @default(now())
+  note          String             @default("")
+  item          MarketingMerchItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
+  @@index([issuedAt])
+  @@map("marketing_merch_issues")
 }
 
 enum Tier {
@@ -68,17 +87,18 @@ enum Tier {
   FAN
 }
 
-enum MarketingResourceType {
-  MERCH
-  CREATIVE
-  BUDGET
-  STAFF
-  CHANNEL
+enum GiftEligibilityStatus {
+  PENDING
+  DELIVERED
+  REVIEW
+  CLOSED
 }
 
-enum MarketingResourceStatus {
-  REQUESTED
-  IN_PROGRESS
-  READY
-  DEPLOYED
+enum MerchCategory {
+  PEN
+  NOTEBOOK
+  STICKER
+  STUFFED_TOY
+  GIFT_SET
+  OTHER
 }

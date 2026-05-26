@@ -6,10 +6,12 @@ import express from "express";
 import {
   askAiPayload,
   createMarketingResourcePayload,
+  createMarketingResourceIssuePayload,
   deliverClientPayload,
   getClientsPayload,
   getGiftHistoryPayload,
   getHealthPayload,
+  getMarketingResourceIssuesPayload,
   getMarketingResourcesPayload,
   logGiftPayload,
   updateMarketingResourcePayload,
@@ -43,6 +45,10 @@ function createApp() {
     res.json(await getMarketingResourcesPayload(req.query));
   });
 
+  app.get("/api/marketing/issues", async (req, res) => {
+    res.json(await getMarketingResourceIssuesPayload(req.query));
+  });
+
   app.patch("/api/clients/:id/deliver", async (req, res) => {
     const result = await deliverClientPayload(req.params.id);
     res.status(result.status).json(result.body);
@@ -63,6 +69,11 @@ function createApp() {
 
   app.post("/api/marketing/resources", async (req, res) => {
     const result = await createMarketingResourcePayload(req.body);
+    res.status(result.status).json(result.body);
+  });
+
+  app.post("/api/marketing/issues", async (req, res) => {
+    const result = await createMarketingResourceIssuePayload(req.body);
     res.status(result.status).json(result.body);
   });
 

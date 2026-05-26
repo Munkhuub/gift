@@ -1,7 +1,9 @@
 import { initialClients, normalizeClient } from "../src/data/clients.js";
 import {
-  initialMarketingResources,
-  normalizeMarketingResource,
+  initialMarketingMerchItems,
+  initialMarketingMerchIssues,
+  normalizeMarketingMerchItem,
+  normalizeMarketingMerchIssue,
 } from "../src/data/marketingResources.js";
 
 function parseGiftDate(giftDate) {
@@ -13,7 +15,7 @@ function parseGiftDate(giftDate) {
 }
 
 function buildGiftCreate(client) {
-  if (!client.giftDone && !client.giftType && !client.deliveredBy && !client.note) {
+  if (!client.giftDone) {
     return [];
   }
 
@@ -36,9 +38,16 @@ function buildClientCreate(client) {
     lastName: normalized.last,
     phoneMasked: normalized.phone,
     tier: normalized.tier,
+    previousTier: normalized.previousTier || null,
     giftDone: normalized.giftDone,
+    giftStillOwed: normalized.giftStillOwed,
+    giftEligibilityStatus: normalized.giftEligibilityStatus,
     giftDate: parseGiftDate(normalized.giftDate),
     hasLoan: normalized.loan,
+    loanOverdueDays: normalized.loanOverdueDays,
+    isWaitlist: normalized.isWaitlist,
+    tierChangedAt: parseGiftDate(normalized.tierChangedAt),
+    statusReason: normalized.statusReason,
     note: normalized.note,
     giftType: normalized.giftType,
     deliveredBy: normalized.deliveredBy,
@@ -52,47 +61,90 @@ export function getPrismaSeedClients() {
   return initialClients.map(buildClientCreate);
 }
 
-function buildMarketingResourceCreate(resource) {
-  const normalized = normalizeMarketingResource(resource);
+function buildMarketingMerchItemCreate(item) {
+  const normalized = normalizeMarketingMerchItem(item);
 
   return {
     id: normalized.id,
     name: normalized.name,
-    campaign: normalized.campaign,
-    resourceType: normalized.resourceType,
-    owner: normalized.owner,
-    status: normalized.status,
-    quantity: normalized.quantity,
-    budget: normalized.budget,
-    neededBy: parseGiftDate(normalized.neededBy),
-    vendor: normalized.vendor,
+    category: normalized.category,
+    unit: normalized.unit,
+    totalStock: normalized.totalStock,
+    issuedStock: normalized.issuedStock,
+    storageLocation: normalized.storageLocation,
     note: normalized.note,
   };
 }
 
-export function getPrismaSeedMarketingResources() {
-  return initialMarketingResources.map(buildMarketingResourceCreate);
+function buildMarketingMerchIssueCreate(issue) {
+  const normalized = normalizeMarketingMerchIssue(issue);
+
+  return {
+    id: normalized.id,
+    itemId: normalized.itemId,
+    quantity: normalized.quantity,
+    recipientName: normalized.recipientName,
+    purpose: normalized.purpose,
+    issuedBy: normalized.issuedBy,
+    issuedAt: parseGiftDate(normalized.issuedAt) || new Date(),
+    note: normalized.note,
+  };
+}
+
+async function syncSerialSequence(prismaClient, tableName) {
+  await prismaClient.$executeRawUnsafe(
+    `SELECT setval(pg_get_serial_sequence('"${tableName}"', 'id'), COALESCE((SELECT MAX("id") FROM "${tableName}"), 0) + 1, false);`,
+  );
+}
+
+export function getPrismaSeedMarketingMerchItems() {
+  return initialMarketingMerchItems.map(buildMarketingMerchItemCreate);
+}
+
+export function getPrismaSeedMarketingMerchIssues() {
+  return initialMarketingMerchIssues.map(buildMarketingMerchIssueCreate);
 }
 
 export async function seedMarketingResources(prismaClient) {
-  const marketingResources = getPrismaSeedMarketingResources();
+  const merchItems = getPrismaSeedMarketingMerchItems();
+  const merchIssues = getPrismaSeedMarketingMerchIssues();
 
-  for (const resource of marketingResources) {
-    await prismaClient.marketingResource.create({
-      data: resource,
+  for (const item of merchItems) {
+    await prismaClient.marketingMerchItem.create({
+      data: item,
     });
   }
 
-  return marketingResources.length;
+  for (const issue of merchIssues) {
+    await prismaClient.marketingMerchIssue.create({
+      data: issue,
+    });
+  }
+
+  await syncSerialSequence(prismaClient, "marketing_merch_items");
+  await syncSerialSequence(prismaClient, "marketing_merch_issues");
+
+  return {
+    merchItems: merchItems.length,
+    merchIssues: merchIssues.length,
+  };
+}
+
+export async function resetMarketingResources(prismaClient) {
+  await prismaClient.marketingMerchIssue.deleteMany();
+  await prismaClient.marketingMerchItem.deleteMany();
+
+  return seedMarketingResources(prismaClient);
 }
 
 export async function reseedPrisma(prismaClient) {
   const clients = getPrismaSeedClients();
+  let marketingResources;
 
   // Hosted pooled Postgres can time out while starting explicit transactions,
   // so the seed reset uses simple sequential deletes instead.
   await prismaClient.giftLog.deleteMany();
-  await prismaClient.marketingResource.deleteMany();
+  marketingResources = await resetMarketingResources(prismaClient);
   await prismaClient.client.deleteMany();
 
   for (const client of clients) {
@@ -100,8 +152,6 @@ export async function reseedPrisma(prismaClient) {
       data: client,
     });
   }
-
-  const marketingResources = await seedMarketingResources(prismaClient);
 
   return {
     clients: clients.length,

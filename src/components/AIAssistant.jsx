@@ -2,17 +2,17 @@ import { useState, useRef, useEffect } from "react";
 import { askAssistant } from "../lib/api";
 
 const QUICK = [
-  "How many GOD-tier gifts are still pending?",
-  "Give me a VIP finance summary report",
-  "What percentage of GOD-tier gifts are delivered?",
-  "What should we prioritize for GOD-tier clients?",
+  "How many gift obligations are still open?",
+  "How many former GOD clients still need gifts?",
+  "Which clients should we prioritize first today?",
+  "Give me a finance summary of active GOD vs owed gift queue",
 ];
 
 export default function AIAssistant() {
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      text: "Hello! I can answer questions about your GOD-tier gift delivery status. I only use aggregated, anonymized data — no personal client information is ever sent to the AI.",
+      text: "Hello! I can answer questions about current GOD users, former GOD clients who still need gifts, and waitlist promotions. I only use aggregated, anonymized data — no personal client information is ever sent to the AI.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -69,10 +69,10 @@ export default function AIAssistant() {
         }}
       >
         🔒{" "}
-        <span>
-          <strong>Privacy-safe:</strong> The browser sends your question to the
-          app backend, and only aggregated GOD-tier totals are forwarded to the AI.
-        </span>
+          <span>
+            <strong>Privacy-safe:</strong> The browser sends your question to the
+            app backend, and only aggregated queue totals are forwarded to the AI.
+          </span>
       </div>
 
       <div
@@ -104,7 +104,7 @@ export default function AIAssistant() {
               marginLeft: 4,
             }}
           >
-            GOD-tier aggregated data only
+            Aggregated portfolio data only
           </span>
         </div>
 
@@ -209,7 +209,7 @@ export default function AIAssistant() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && send()}
-            placeholder="Ask about GOD-tier delivery status..."
+            placeholder="Ask about the GOD queue, downgrades, or waitlist promotions..."
             disabled={loading}
             style={{
               flex: 1,

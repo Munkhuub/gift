@@ -7,7 +7,9 @@ export default function LogGift({ clients, history, onLog }) {
   const [error, setError] = useState("");
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
-  const pendingGodClients = clients.filter((client) => client.tier === "GOD" && !client.giftDone);
+  const pendingGiftQueue = clients.filter(
+    (client) => client.giftStillOwed && !client.giftDone,
+  );
 
   const handleSubmit = async () => {
     if (!form.clientId) { alert('Please select a client'); return; }
@@ -39,15 +41,17 @@ export default function LogGift({ clients, history, onLog }) {
   return (
     <div>
       <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 12, padding: 24, maxWidth: 560 }}>
-        <div style={{ fontSize: 15, fontWeight: 600, color: '#1E293B', marginBottom: 20 }}>Record a GOD-tier gift delivery</div>
+        <div style={{ fontSize: 15, fontWeight: 600, color: '#1E293B', marginBottom: 20 }}>Record a gift delivery from the obligation queue</div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
           <div>
-            <label style={labelStyle}>GOD client *</label>
+            <label style={labelStyle}>Queued client *</label>
             <select value={form.clientId} onChange={e => set('clientId', e.target.value)} style={inputStyle}>
-              <option value="">Select GOD client...</option>
-              {pendingGodClients.map(c => (
-                <option key={c.id} value={c.id}>{c.last} {c.first} ({c.tier})</option>
+              <option value="">Select client from gift queue...</option>
+              {pendingGiftQueue.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.last} {c.first} ({c.tier}{c.previousTier === "GOD" && c.tier !== "GOD" ? " • former GOD" : ""})
+                </option>
               ))}
             </select>
           </div>
@@ -97,7 +101,7 @@ export default function LogGift({ clients, history, onLog }) {
       </div>
 
       <div style={{ marginTop: 16, background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#1D4ED8', display: 'flex', gap: 8, alignItems: 'center', maxWidth: 560 }}>
-        🔒 <span>GOD-tier gift records are saved through your app backend, so the VIP delivery log persists instead of resetting on refresh.</span>
+        🔒 <span>Gift records are saved through your app backend, so active GODs and former GODs who are still owed a gift stay in one persistent queue.</span>
       </div>
 
       <div style={{ marginTop: 20, maxWidth: 560 }}>

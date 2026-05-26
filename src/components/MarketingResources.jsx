@@ -1,196 +1,202 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  MARKETING_RESOURCE_STATUSES,
-  MARKETING_RESOURCE_TYPES,
-} from "../data/marketingResources.js";
-import { fetchMarketingResources } from "../lib/api";
+import { MERCH_CATEGORIES } from "../data/marketingResources.js";
 
-const typeLabels = {
-  MERCH: "Merch",
-  CREATIVE: "Creative",
-  BUDGET: "Budget",
-  STAFF: "Staff",
-  CHANNEL: "Channel",
+const categoryLabels = {
+  PEN: "Pen",
+  NOTEBOOK: "Notebook",
+  STICKER: "Sticker",
+  STUFFED_TOY: "Stuffed Toy",
+  GIFT_SET: "Gift Set",
+  OTHER: "Other",
 };
-
-const statusLabels = {
-  REQUESTED: "Requested",
-  IN_PROGRESS: "In Progress",
-  READY: "Ready",
-  DEPLOYED: "Deployed",
-};
-
-const statusColors = {
-  REQUESTED: { bg: "#FEF3C7", text: "#92400E", border: "#FCD34D" },
-  IN_PROGRESS: { bg: "#EFF6FF", text: "#1D4ED8", border: "#BFDBFE" },
-  READY: { bg: "#ECFDF5", text: "#047857", border: "#A7F3D0" },
-  DEPLOYED: { bg: "#F5F3FF", text: "#6D28D9", border: "#DDD6FE" },
-};
-
-function formatMoney(value) {
-  if (value === null || value === undefined || value === "") {
-    return "—";
-  }
-
-  return `${Number(value).toLocaleString("en-US")} MNT`;
-}
 
 export default function MarketingResources({
   initialResources,
+  initialIssues,
   onCreate,
+  onFilterIssues,
+  onIssue,
   onUpdate,
 }) {
-  const [resources, setResources] = useState(initialResources);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
-  const [typeFilter, setTypeFilter] = useState("ALL");
-  const [neededBy, setNeededBy] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [savingId, setSavingId] = useState(null);
-  const [form, setForm] = useState({
+  const [inventoryFilter, setInventoryFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("ALL");
+  const [issueDateFilter, setIssueDateFilter] = useState("");
+  const [itemForm, setItemForm] = useState({
     name: "",
-    campaign: "",
-    resourceType: "MERCH",
-    owner: "",
-    status: "REQUESTED",
-    quantity: "",
-    budget: "",
-    neededBy: "",
-    vendor: "",
+    category: "PEN",
+    totalStock: "",
+    unit: "pcs",
+    storageLocation: "",
     note: "",
   });
-  const [formError, setFormError] = useState("");
-  const [formSuccess, setFormSuccess] = useState("");
+  const [issueForm, setIssueForm] = useState({
+    itemId: "",
+    quantity: "",
+    recipientName: "",
+    purpose: "",
+    issuedBy: "",
+    issuedAt: new Date().toISOString().split("T")[0],
+    note: "",
+  });
+  const [itemError, setItemError] = useState("");
+  const [itemSuccess, setItemSuccess] = useState("");
+  const [issueError, setIssueError] = useState("");
+  const [issueSuccess, setIssueSuccess] = useState("");
+  const [savingItem, setSavingItem] = useState(false);
+  const [savingIssue, setSavingIssue] = useState(false);
 
   useEffect(() => {
-    setResources(initialResources);
-  }, [initialResources]);
-
-  useEffect(() => {
-    const noFilters =
-      !search.trim() &&
-      statusFilter === "ALL" &&
-      typeFilter === "ALL" &&
-      !neededBy;
-
-    if (noFilters) {
-      setResources(initialResources);
-      setError("");
-      return;
+    if (!onFilterIssues) {
+      return undefined;
     }
 
     let active = true;
 
-    async function loadFilteredResources() {
+    const loadIssues = async () => {
       try {
-        setLoading(true);
-        setError("");
-        const filteredResources = await fetchMarketingResources({
-          search: search.trim() || undefined,
-          status: statusFilter === "ALL" ? undefined : statusFilter,
-          resourceType: typeFilter === "ALL" ? undefined : typeFilter,
-          neededBy: neededBy || undefined,
-        });
-
-        if (active) {
-          setResources(filteredResources);
-        }
-      } catch (loadError) {
-        if (active) {
-          setError(
-            loadError.message || "Could not load filtered marketing resources.",
-          );
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
+        await onFilterIssues(issueDateFilter ? { date: issueDateFilter } : {});
+      } catch {
+        if (!active) {
+          return;
         }
       }
-    }
+    };
 
-    loadFilteredResources();
+    loadIssues();
 
     return () => {
       active = false;
     };
-  }, [initialResources, neededBy, search, statusFilter, typeFilter]);
+  }, [issueDateFilter, onFilterIssues]);
+
+  const filteredInventory = useMemo(() => {
+    const search = inventoryFilter.trim().toLowerCase();
+
+    return initialResources.filter((item) => {
+      const matchesSearch =
+        !search ||
+        item.name.toLowerCase().includes(search) ||
+        item.storageLocation.toLowerCase().includes(search) ||
+        item.note.toLowerCase().includes(search);
+      const matchesCategory =
+        categoryFilter === "ALL" || item.category === categoryFilter;
+
+      return matchesSearch && matchesCategory;
+    });
+  }, [categoryFilter, initialResources, inventoryFilter]);
+
+  const filteredIssues = useMemo(() => initialIssues, [initialIssues]);
 
   const summary = useMemo(() => {
-    const byStatus = MARKETING_RESOURCE_STATUSES.reduce((acc, status) => {
-      acc[status] = resources.filter((resource) => resource.status === status).length;
-      return acc;
-    }, {});
-
-    const totalBudget = resources.reduce(
-      (sum, resource) => sum + (resource.budget || 0),
-      0,
+    return initialResources.reduce(
+      (acc, item) => {
+        acc.totalItems += 1;
+        acc.totalStock += item.totalStock;
+        acc.totalIssued += item.issuedStock;
+        acc.totalRemaining += item.remainingStock;
+        if (item.remainingStock <= 10) {
+          acc.lowStock += 1;
+        }
+        return acc;
+      },
+      {
+        totalItems: 0,
+        totalStock: 0,
+        totalIssued: 0,
+        totalRemaining: 0,
+        lowStock: 0,
+      },
     );
+  }, [initialResources]);
 
-    return {
-      total: resources.length,
-      totalBudget,
-      byStatus,
-    };
-  }, [resources]);
+  const pendingIssueItem = initialResources.find(
+    (item) => item.id === Number(issueForm.itemId),
+  );
 
-  const setFormField = (key, value) => {
-    setForm((current) => ({ ...current, [key]: value }));
+  const setItemField = (key, value) => {
+    setItemForm((current) => ({ ...current, [key]: value }));
   };
 
-  const resetForm = () => {
-    setForm({
-      name: "",
-      campaign: "",
-      resourceType: "MERCH",
-      owner: "",
-      status: "REQUESTED",
-      quantity: "",
-      budget: "",
-      neededBy: "",
-      vendor: "",
-      note: "",
-    });
+  const setIssueField = (key, value) => {
+    setIssueForm((current) => ({ ...current, [key]: value }));
   };
 
-  const handleCreate = async () => {
-    setFormError("");
-    setFormSuccess("");
+  const handleCreateItem = async () => {
+    setSavingItem(true);
+    setItemError("");
+    setItemSuccess("");
 
     const created = await onCreate({
-      ...form,
-      quantity: form.quantity === "" ? null : Number(form.quantity),
-      budget: form.budget === "" ? null : Number(form.budget),
+      ...itemForm,
+      totalStock: Number(itemForm.totalStock || 0),
     });
 
+    setSavingItem(false);
+
     if (!created) {
-      setFormError("Could not save this marketing resource.");
+      setItemError("Could not save this merch item.");
       return;
     }
 
-    setResources((current) =>
-      [...current, created].sort((a, b) =>
-        (a.neededBy || "9999-12-31").localeCompare(b.neededBy || "9999-12-31"),
-      ),
-    );
-    resetForm();
-    setFormSuccess("Marketing resource saved.");
+    setItemForm({
+      name: "",
+      category: "PEN",
+      totalStock: "",
+      unit: "pcs",
+      storageLocation: "",
+      note: "",
+    });
+    setItemSuccess("Merch item added to inventory.");
   };
 
-  const handleStatusUpdate = async (resourceId, status) => {
-    setSavingId(resourceId);
-    const updated = await onUpdate(resourceId, { status });
-    setSavingId(null);
+  const handleIssueItem = async () => {
+    setSavingIssue(true);
+    setIssueError("");
+    setIssueSuccess("");
 
-    if (!updated) {
+    const result = await onIssue({
+      ...issueForm,
+      itemId: Number(issueForm.itemId),
+      quantity: Number(issueForm.quantity || 0),
+    });
+
+    setSavingIssue(false);
+
+    if (!result) {
+      setIssueError("Could not record this merch issue.");
       return;
     }
 
-    setResources((current) =>
-      current.map((resource) =>
-        resource.id === updated.id ? updated : resource,
-      ),
+    setIssueForm({
+      itemId: "",
+      quantity: "",
+      recipientName: "",
+      purpose: "",
+      issuedBy: "",
+      issuedAt: new Date().toISOString().split("T")[0],
+      note: "",
+    });
+    setIssueSuccess("Merch issue recorded.");
+  };
+
+  const handleRestock = async (item) => {
+    const amountText = window.prompt(
+      `Add stock for ${item.name}. How many ${item.unit} arrived?`,
+      "10",
     );
+
+    if (!amountText) {
+      return;
+    }
+
+    const amount = Number(amountText);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return;
+    }
+
+    await onUpdate(item.id, {
+      totalStock: item.totalStock + amount,
+    });
   };
 
   return (
@@ -207,9 +213,9 @@ export default function MarketingResources({
           lineHeight: 1.6,
         }}
       >
-        Separate workspace for marketing team resource input, vendor readiness,
-        and campaign support tracking. This stays independent from GOD-tier gift
-        delivery records.
+        Marketing merch tracker for physical giveaway items like pens,
+        notebooks, stickers, stuffed toys, and gift sets. Track what is in
+        stock, what went out, who received it, and why it was issued.
       </div>
 
       <div
@@ -221,21 +227,13 @@ export default function MarketingResources({
         }}
       >
         {[
-          { label: "Total resources", value: summary.total, color: "#1E293B" },
+          { label: "Merch types", value: summary.totalItems, color: "#1E293B" },
+          { label: "Total stock", value: summary.totalStock, color: "#1D4ED8" },
+          { label: "Went out", value: summary.totalIssued, color: "#D97706" },
           {
-            label: "Requested",
-            value: summary.byStatus.REQUESTED,
-            color: "#D97706",
-          },
-          {
-            label: "In progress",
-            value: summary.byStatus.IN_PROGRESS,
-            color: "#2563EB",
-          },
-          {
-            label: "Tracked budget",
-            value: formatMoney(summary.totalBudget),
-            color: "#047857",
+            label: "Remaining on hand",
+            value: summary.totalRemaining,
+            color: "#15803D",
           },
         ].map((card) => (
           <div
@@ -268,225 +266,280 @@ export default function MarketingResources({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(320px, 0.95fr) minmax(0, 1.25fr)",
+          gridTemplateColumns: "minmax(320px, 0.9fr) minmax(320px, 1fr)",
           gap: 18,
+          marginBottom: 20,
           alignItems: "start",
         }}
       >
-        <div
-          style={{
-            background: "#fff",
-            border: "1px solid #E2E8F0",
-            borderRadius: 12,
-            padding: 20,
-          }}
-        >
-          <div
-            style={{
-              fontSize: 15,
-              fontWeight: 600,
-              color: "#1E293B",
-              marginBottom: 18,
-            }}
-          >
-            Add marketing resource
-          </div>
+        <div style={panelStyle}>
+          <div style={panelTitleStyle}>Add merch stock item</div>
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 12,
-              marginBottom: 12,
-            }}
-          >
+          <div style={twoColumnStyle}>
             <input
-              value={form.name}
-              onChange={(event) => setFormField("name", event.target.value)}
-              placeholder="Resource name"
+              value={itemForm.name}
+              onChange={(event) => setItemField("name", event.target.value)}
+              placeholder="Item name"
               style={inputStyle}
             />
-            <input
-              value={form.campaign}
-              onChange={(event) => setFormField("campaign", event.target.value)}
-              placeholder="Campaign"
-              style={inputStyle}
-            />
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 12,
-              marginBottom: 12,
-            }}
-          >
             <select
-              value={form.resourceType}
+              value={itemForm.category}
+              onChange={(event) => setItemField("category", event.target.value)}
+              style={inputStyle}
+            >
+              {MERCH_CATEGORIES.map((category) => (
+                <option key={category} value={category}>
+                  {categoryLabels[category]}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={threeColumnStyle}>
+            <input
+              type="number"
+              min="0"
+              value={itemForm.totalStock}
+              onChange={(event) => setItemField("totalStock", event.target.value)}
+              placeholder="Starting stock"
+              style={inputStyle}
+            />
+            <input
+              value={itemForm.unit}
+              onChange={(event) => setItemField("unit", event.target.value)}
+              placeholder="Unit"
+              style={inputStyle}
+            />
+            <input
+              value={itemForm.storageLocation}
               onChange={(event) =>
-                setFormField("resourceType", event.target.value)
+                setItemField("storageLocation", event.target.value)
               }
-              style={inputStyle}
-            >
-              {MARKETING_RESOURCE_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {typeLabels[type]}
-                </option>
-              ))}
-            </select>
-            <select
-              value={form.status}
-              onChange={(event) => setFormField("status", event.target.value)}
-              style={inputStyle}
-            >
-              {MARKETING_RESOURCE_STATUSES.map((status) => (
-                <option key={status} value={status}>
-                  {statusLabels[status]}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 12,
-              marginBottom: 12,
-            }}
-          >
-            <input
-              value={form.owner}
-              onChange={(event) => setFormField("owner", event.target.value)}
-              placeholder="Owner"
-              style={inputStyle}
-            />
-            <input
-              value={form.vendor}
-              onChange={(event) => setFormField("vendor", event.target.value)}
-              placeholder="Vendor or channel"
-              style={inputStyle}
-            />
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr",
-              gap: 12,
-              marginBottom: 12,
-            }}
-          >
-            <input
-              type="number"
-              min="0"
-              value={form.quantity}
-              onChange={(event) => setFormField("quantity", event.target.value)}
-              placeholder="Quantity"
-              style={inputStyle}
-            />
-            <input
-              type="number"
-              min="0"
-              value={form.budget}
-              onChange={(event) => setFormField("budget", event.target.value)}
-              placeholder="Budget"
-              style={inputStyle}
-            />
-            <input
-              type="date"
-              value={form.neededBy}
-              onChange={(event) => setFormField("neededBy", event.target.value)}
+              placeholder="Storage location"
               style={inputStyle}
             />
           </div>
 
           <textarea
-            value={form.note}
-            onChange={(event) => setFormField("note", event.target.value)}
-            placeholder="Operational note"
-            style={{
-              ...inputStyle,
-              minHeight: 88,
-              resize: "vertical",
-              marginBottom: 12,
-            }}
+            value={itemForm.note}
+            onChange={(event) => setItemField("note", event.target.value)}
+            placeholder="Optional note"
+            style={{ ...inputStyle, minHeight: 84, resize: "vertical" }}
           />
 
           <button
-            onClick={handleCreate}
-            style={{
-              fontSize: 13,
-              padding: "10px 18px",
-              borderRadius: 8,
-              border: "none",
-              background: "#1E293B",
-              color: "#fff",
-              cursor: "pointer",
-              fontWeight: 600,
-            }}
+            disabled={savingItem}
+            onClick={handleCreateItem}
+            style={primaryButtonStyle}
           >
-            Save marketing resource
+            {savingItem ? "Saving..." : "Save merch item"}
           </button>
 
-          {formError && <div style={errorStyle}>{formError}</div>}
-          {formSuccess && <div style={successStyle}>{formSuccess}</div>}
+          {itemError && <div style={errorStyle}>{itemError}</div>}
+          {itemSuccess && <div style={successStyle}>{itemSuccess}</div>}
         </div>
 
-        <div>
-          <div
-            style={{
-              display: "flex",
-              gap: 10,
-              flexWrap: "wrap",
-              marginBottom: 14,
-            }}
-          >
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search name, campaign, owner..."
-              style={{ ...inputStyle, flex: 1, minWidth: 220 }}
-            />
+        <div style={panelStyle}>
+          <div style={panelTitleStyle}>Record merch going out</div>
+
+          <div style={twoColumnStyle}>
             <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-              style={{ ...inputStyle, width: 160 }}
+              value={issueForm.itemId}
+              onChange={(event) => setIssueField("itemId", event.target.value)}
+              style={inputStyle}
             >
-              <option value="ALL">All statuses</option>
-              {MARKETING_RESOURCE_STATUSES.map((status) => (
-                <option key={status} value={status}>
-                  {statusLabels[status]}
-                </option>
-              ))}
-            </select>
-            <select
-              value={typeFilter}
-              onChange={(event) => setTypeFilter(event.target.value)}
-              style={{ ...inputStyle, width: 160 }}
-            >
-              <option value="ALL">All types</option>
-              {MARKETING_RESOURCE_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {typeLabels[type]}
-                </option>
-              ))}
+              <option value="">Select merch item...</option>
+              {initialResources
+                .filter((item) => item.remainingStock > 0)
+                .map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name} ({item.remainingStock} {item.unit} left)
+                  </option>
+                ))}
             </select>
             <input
-              type="date"
-              value={neededBy}
-              onChange={(event) => setNeededBy(event.target.value)}
-              style={{ ...inputStyle, width: 160 }}
+              type="number"
+              min="1"
+              value={issueForm.quantity}
+              onChange={(event) => setIssueField("quantity", event.target.value)}
+              placeholder="Quantity out"
+              style={inputStyle}
             />
           </div>
 
-          {loading && (
-            <div style={{ fontSize: 12, color: "#64748B", marginBottom: 10 }}>
-              Loading marketing resources...
+          <div style={twoColumnStyle}>
+            <input
+              value={issueForm.recipientName}
+              onChange={(event) =>
+                setIssueField("recipientName", event.target.value)
+              }
+              placeholder="Who got it"
+              style={inputStyle}
+            />
+            <input
+              value={issueForm.purpose}
+              onChange={(event) => setIssueField("purpose", event.target.value)}
+              placeholder="Purpose"
+              style={inputStyle}
+            />
+          </div>
+
+          <div style={twoColumnStyle}>
+            <input
+              value={issueForm.issuedBy}
+              onChange={(event) => setIssueField("issuedBy", event.target.value)}
+              placeholder="Issued by"
+              style={inputStyle}
+            />
+            <input
+              type="date"
+              value={issueForm.issuedAt}
+              onChange={(event) => setIssueField("issuedAt", event.target.value)}
+              style={inputStyle}
+            />
+          </div>
+
+          <textarea
+            value={issueForm.note}
+            onChange={(event) => setIssueField("note", event.target.value)}
+            placeholder="Optional issue note"
+            style={{ ...inputStyle, minHeight: 84, resize: "vertical" }}
+          />
+
+          {pendingIssueItem && (
+            <div
+              style={{
+                marginTop: 12,
+                background: "#EFF6FF",
+                border: "1px solid #BFDBFE",
+                borderRadius: 8,
+                padding: "10px 12px",
+                fontSize: 12,
+                color: "#1D4ED8",
+              }}
+            >
+              Remaining before issue:{" "}
+              <strong>
+                {pendingIssueItem.remainingStock} {pendingIssueItem.unit}
+              </strong>
             </div>
           )}
-          {error && <div style={errorStyle}>{error}</div>}
+
+          <button
+            disabled={savingIssue}
+            onClick={handleIssueItem}
+            style={primaryButtonStyle}
+          >
+            {savingIssue ? "Saving..." : "Record merch out"}
+          </button>
+
+          {issueError && <div style={errorStyle}>{issueError}</div>}
+          {issueSuccess && <div style={successStyle}>{issueSuccess}</div>}
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 0.9fr)",
+          gap: 18,
+        }}
+      >
+        <div style={panelStyle}>
+          <div style={panelHeaderRowStyle}>
+            <div style={panelTitleStyle}>Merch inventory</div>
+            <span style={{ fontSize: 12, color: "#64748B" }}>
+              {summary.lowStock} low-stock item{summary.lowStock === 1 ? "" : "s"}
+            </span>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+            <input
+              value={inventoryFilter}
+              onChange={(event) => setInventoryFilter(event.target.value)}
+              placeholder="Search merch or location..."
+              style={{ ...inputStyle, flex: 1, minWidth: 220 }}
+            />
+            <select
+              value={categoryFilter}
+              onChange={(event) => setCategoryFilter(event.target.value)}
+              style={{ ...inputStyle, width: 180 }}
+            >
+              <option value="ALL">All categories</option>
+              {MERCH_CATEGORIES.map((category) => (
+                <option key={category} value={category}>
+                  {categoryLabels[category]}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={tableWrapStyle}>
+            <table style={tableStyle}>
+              <thead>
+                <tr style={tableHeadRowStyle}>
+                  {["Item", "Category", "In stock", "Went out", "Left", "Action"].map(
+                    (header) => (
+                      <th key={header} style={tableHeadCellStyle}>
+                        {header}
+                      </th>
+                    ),
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredInventory.map((item) => (
+                  <tr key={item.id} style={tableBodyRowStyle}>
+                    <td style={tableCellStyle}>
+                      <div style={{ fontWeight: 600, color: "#1E293B" }}>
+                        {item.name}
+                      </div>
+                      <div style={{ fontSize: 12, color: "#64748B" }}>
+                        {item.storageLocation || "No location"}
+                      </div>
+                    </td>
+                    <td style={tableCellStyle}>{categoryLabels[item.category]}</td>
+                    <td style={tableCellStyle}>
+                      {item.totalStock} {item.unit}
+                    </td>
+                    <td style={tableCellStyle}>
+                      {item.issuedStock} {item.unit}
+                    </td>
+                    <td style={tableCellStyle}>
+                      <span
+                        style={{
+                          color: item.remainingStock <= 10 ? "#DC2626" : "#15803D",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {item.remainingStock} {item.unit}
+                      </span>
+                    </td>
+                    <td style={tableCellStyle}>
+                      <button
+                        onClick={() => handleRestock(item)}
+                        style={secondaryButtonStyle}
+                      >
+                        Restock
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div style={panelStyle}>
+          <div style={panelHeaderRowStyle}>
+            <div style={panelTitleStyle}>Recent merch out history</div>
+            <input
+              type="date"
+              value={issueDateFilter}
+              onChange={(event) => setIssueDateFilter(event.target.value)}
+              style={{ ...inputStyle, width: 150 }}
+            />
+          </div>
 
           <div
             style={{
@@ -496,124 +549,54 @@ export default function MarketingResources({
               overflow: "hidden",
             }}
           >
-            {resources.length === 0 ? (
-              <div style={{ padding: 20, fontSize: 13, color: "#94A3B8" }}>
-                No marketing resources matched the current filters.
+            {filteredIssues.length === 0 ? (
+              <div style={{ padding: 18, fontSize: 13, color: "#94A3B8" }}>
+                No merch issue history matched that day.
               </div>
             ) : (
-              resources.map((resource, index) => {
-                const palette =
-                  statusColors[resource.status] || statusColors.REQUESTED;
-
-                return (
+              filteredIssues.map((issue, index) => (
+                <div
+                  key={issue.id}
+                  style={{
+                    padding: "14px 16px",
+                    borderTop: index === 0 ? "none" : "1px solid #F1F5F9",
+                  }}
+                >
                   <div
-                    key={resource.id}
                     style={{
-                      padding: "16px 18px",
-                      borderTop: index === 0 ? "none" : "1px solid #F1F5F9",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      marginBottom: 6,
                     }}
                   >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: 12,
-                        alignItems: "flex-start",
-                        marginBottom: 10,
-                      }}
-                    >
-                      <div>
-                        <div
-                          style={{
-                            fontSize: 14,
-                            fontWeight: 600,
-                            color: "#1E293B",
-                            marginBottom: 4,
-                          }}
-                        >
-                          {resource.name}
-                        </div>
-                        <div style={{ fontSize: 12, color: "#64748B" }}>
-                          {resource.campaign || "No campaign"} •{" "}
-                          {typeLabels[resource.resourceType]} •{" "}
-                          {resource.owner || "Unassigned"}
-                        </div>
-                      </div>
-                      <span
-                        style={{
-                          background: palette.bg,
-                          color: palette.text,
-                          border: `1px solid ${palette.border}`,
-                          borderRadius: 99,
-                          padding: "4px 10px",
-                          fontSize: 11,
-                          fontWeight: 600,
-                        }}
-                      >
-                        {statusLabels[resource.status]}
-                      </span>
+                    <div style={{ fontWeight: 600, color: "#1E293B" }}>
+                      {issue.itemName}
                     </div>
-
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-                        gap: 10,
-                        marginBottom: 10,
-                        fontSize: 12,
-                        color: "#475569",
-                      }}
-                    >
-                      <div>Needed by: {resource.neededBy || "—"}</div>
-                      <div>Quantity: {resource.quantity ?? "—"}</div>
-                      <div>Budget: {formatMoney(resource.budget)}</div>
-                      <div>Vendor: {resource.vendor || "—"}</div>
-                    </div>
-
-                    {resource.note && (
-                      <div
-                        style={{
-                          marginBottom: 10,
-                          fontSize: 12,
-                          color: "#475569",
-                          lineHeight: 1.6,
-                        }}
-                      >
-                        {resource.note}
-                      </div>
-                    )}
-
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 10,
-                        alignItems: "center",
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <select
-                        value={resource.status}
-                        onChange={(event) =>
-                          handleStatusUpdate(resource.id, event.target.value)
-                        }
-                        disabled={savingId === resource.id}
-                        style={{ ...inputStyle, width: 160 }}
-                      >
-                        {MARKETING_RESOURCE_STATUSES.map((status) => (
-                          <option key={status} value={status}>
-                            {statusLabels[status]}
-                          </option>
-                        ))}
-                      </select>
-                      <span style={{ fontSize: 12, color: "#64748B" }}>
-                        {savingId === resource.id
-                          ? "Saving..."
-                          : "Update status directly from the tracker."}
-                      </span>
+                    <div style={{ fontSize: 12, color: "#64748B" }}>
+                      {issue.issuedAt}
                     </div>
                   </div>
-                );
-              })
+                  <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.7 }}>
+                    {issue.quantity} {issue.quantity === 1 ? "item" : "items"} went to{" "}
+                    <strong>{issue.recipientName}</strong>
+                    <br />
+                    Purpose: {issue.purpose}
+                    {issue.issuedBy ? (
+                      <>
+                        <br />
+                        Issued by: {issue.issuedBy}
+                      </>
+                    ) : null}
+                    {issue.note ? (
+                      <>
+                        <br />
+                        Note: {issue.note}
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              ))
             )}
           </div>
         </div>
@@ -621,6 +604,28 @@ export default function MarketingResources({
     </div>
   );
 }
+
+const panelStyle = {
+  background: "#fff",
+  border: "1px solid #E2E8F0",
+  borderRadius: 12,
+  padding: 20,
+};
+
+const panelTitleStyle = {
+  fontSize: 15,
+  fontWeight: 600,
+  color: "#1E293B",
+  marginBottom: 16,
+};
+
+const panelHeaderRowStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 10,
+  alignItems: "center",
+  marginBottom: 14,
+};
 
 const inputStyle = {
   width: "100%",
@@ -632,6 +637,43 @@ const inputStyle = {
   color: "#1E293B",
   outline: "none",
   fontFamily: "inherit",
+};
+
+const twoColumnStyle = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 12,
+  marginBottom: 12,
+};
+
+const threeColumnStyle = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr 1fr",
+  gap: 12,
+  marginBottom: 12,
+};
+
+const primaryButtonStyle = {
+  marginTop: 12,
+  fontSize: 13,
+  padding: "10px 18px",
+  borderRadius: 8,
+  border: "none",
+  background: "#1E293B",
+  color: "#fff",
+  cursor: "pointer",
+  fontWeight: 600,
+};
+
+const secondaryButtonStyle = {
+  fontSize: 12,
+  padding: "7px 12px",
+  borderRadius: 8,
+  border: "1px solid #E2E8F0",
+  background: "#fff",
+  color: "#475569",
+  cursor: "pointer",
+  fontWeight: 500,
 };
 
 const errorStyle = {
@@ -652,4 +694,39 @@ const successStyle = {
   padding: "10px 12px",
   fontSize: 12,
   color: "#15803D",
+};
+
+const tableWrapStyle = {
+  border: "1px solid #E2E8F0",
+  borderRadius: 12,
+  overflow: "hidden",
+};
+
+const tableStyle = {
+  width: "100%",
+  borderCollapse: "collapse",
+  fontSize: 13,
+};
+
+const tableHeadRowStyle = {
+  borderBottom: "2px solid #E2E8F0",
+};
+
+const tableHeadCellStyle = {
+  textAlign: "left",
+  padding: "8px 10px",
+  fontSize: 11,
+  color: "#64748B",
+  textTransform: "uppercase",
+  letterSpacing: "0.05em",
+  fontWeight: 600,
+};
+
+const tableBodyRowStyle = {
+  borderBottom: "1px solid #F1F5F9",
+};
+
+const tableCellStyle = {
+  padding: "12px 10px",
+  verticalAlign: "top",
 };

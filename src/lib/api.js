@@ -61,6 +61,13 @@ export async function fetchMarketingResources(filters = {}) {
   return payload.resources;
 }
 
+export async function fetchMarketingIssues(filters = {}) {
+  const payload = await request(
+    `/api/marketing/issues${toQueryString(filters)}`,
+  );
+  return payload.issues;
+}
+
 export async function markClientDelivered(id) {
   const payload = await request(`/api/clients/${id}/deliver`, {
     method: "PATCH",
@@ -98,4 +105,12 @@ export async function updateMarketingResource(id, updates) {
     body: JSON.stringify(updates),
   });
   return payload.resource;
+}
+
+export async function issueMarketingResource(issue) {
+  const payload = await request("/api/marketing/issues", {
+    method: "POST",
+    body: JSON.stringify(issue),
+  });
+  return payload;
 }

@@ -1,24 +1,24 @@
 import { getAISafeSummary } from "../src/data/clients.js";
 import {
   createMarketingResource,
+  createMarketingResourceIssue,
   ensureClientStore,
   getStoreProvider,
   listClients,
   listGiftLogs,
   listMarketingResources,
+  listMarketingResourceIssues,
   logGiftDelivery,
   markClientDelivered,
   updateMarketingResource,
 } from "./store.js";
 import {
-  MARKETING_RESOURCE_STATUSES,
-  MARKETING_RESOURCE_TYPES,
+  MERCH_CATEGORIES,
 } from "../src/data/marketingResources.js";
 
-const SYSTEM_PROMPT_BASE = `You are an AI assistant for an internal GOD-tier client gift tracking system at a Mongolian financial company. You help Sales, Marketing, and Finance teams monitor VIP gift delivery status. No personal client data is shared — you only receive aggregated totals. Answer questions helpfully based only on the summary provided. For Finance summaries, use a professional format. If asked for individual client details, explain that personal data is kept private and that the workflow is limited to GOD-tier portfolio insights. Respond in the same language the user uses (Mongolian or English). Be concise and direct.`;
+const SYSTEM_PROMPT_BASE = `You are an AI assistant for an internal GOD-tier client gift tracking system at a Mongolian financial company. You help Sales, Marketing, and Finance teams monitor VIP gift delivery status, former GOD clients who still need gifts, and new GOD users promoted from waitlist. No personal client data is shared — you only receive aggregated totals. Answer questions helpfully based only on the summary provided. For Finance summaries, use a professional format. If asked for individual client details, explain that personal data is kept private and that the workflow is limited to aggregated portfolio insights. Respond in the same language the user uses (Mongolian or English). Be concise and direct.`;
 const ANTHROPIC_MODEL =
   process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
-const FOCUS_TIER = "GOD";
 
 function buildUpstreamError(provider, response, data) {
   const message =
@@ -74,9 +74,11 @@ export async function getHealthPayload() {
 
 export async function getClientsPayload(query = {}) {
   const clients = await listClients({
-    tier: FOCUS_TIER,
+    tier: query.tier,
     search: query.search,
     status: query.status,
+    queue: query.queue,
+    overdueDays: query.overdueDays,
     giftDate: query.giftDate,
     dateFrom: query.dateFrom,
     dateTo: query.dateTo,
@@ -87,7 +89,7 @@ export async function getClientsPayload(query = {}) {
 export async function getGiftHistoryPayload(query = {}) {
   const deliveries = await listGiftLogs({
     limit: query.limit,
-    tier: FOCUS_TIER,
+    tier: query.tier,
     date: query.date,
     dateFrom: query.dateFrom,
     dateTo: query.dateTo,
@@ -105,28 +107,33 @@ export async function deliverClientPayload(id) {
 
 export async function getMarketingResourcesPayload(query = {}) {
   const resources = await listMarketingResources({
-    status: query.status,
-    resourceType: query.resourceType,
+    category: query.category,
     search: query.search,
-    neededBy: query.neededBy,
-    dateFrom: query.dateFrom,
-    dateTo: query.dateTo,
   });
 
   return { resources };
 }
 
+export async function getMarketingResourceIssuesPayload(query = {}) {
+  const issues = await listMarketingResourceIssues({
+    limit: query.limit,
+    itemId: query.itemId,
+    search: query.search,
+    date: query.date,
+    dateFrom: query.dateFrom,
+    dateTo: query.dateTo,
+  });
+
+  return { issues };
+}
+
 export async function createMarketingResourcePayload(payload) {
   const {
     name,
-    campaign,
-    resourceType,
-    owner,
-    status,
-    quantity,
-    budget,
-    neededBy,
-    vendor,
+    category,
+    unit,
+    totalStock,
+    storageLocation,
     note,
   } = payload || {};
 
@@ -134,27 +141,22 @@ export async function createMarketingResourcePayload(payload) {
     return { status: 400, body: { error: "name is required." } };
   }
 
-  const normalizedType = String(resourceType || "").toUpperCase();
-  const normalizedStatus = String(status || "REQUESTED").toUpperCase();
+  const normalizedCategory = String(category || "").toUpperCase();
 
-  if (!MARKETING_RESOURCE_TYPES.includes(normalizedType)) {
-    return { status: 400, body: { error: "resourceType is invalid." } };
+  if (!MERCH_CATEGORIES.includes(normalizedCategory)) {
+    return { status: 400, body: { error: "category is invalid." } };
   }
 
-  if (!MARKETING_RESOURCE_STATUSES.includes(normalizedStatus)) {
-    return { status: 400, body: { error: "status is invalid." } };
+  if (!Number.isFinite(Number(totalStock)) || Number(totalStock) < 0) {
+    return { status: 400, body: { error: "totalStock must be 0 or greater." } };
   }
 
   const resource = await createMarketingResource({
     name,
-    campaign,
-    resourceType: normalizedType,
-    owner,
-    status: normalizedStatus,
-    quantity,
-    budget,
-    neededBy,
-    vendor,
+    category: normalizedCategory,
+    unit,
+    totalStock,
+    storageLocation,
     note,
   });
 
@@ -162,26 +164,55 @@ export async function createMarketingResourcePayload(payload) {
 }
 
 export async function updateMarketingResourcePayload(id, payload) {
-  const normalizedStatus =
-    typeof payload?.status === "string" ? payload.status.toUpperCase() : undefined;
-
-  if (
-    normalizedStatus &&
-    !MARKETING_RESOURCE_STATUSES.includes(normalizedStatus)
-  ) {
-    return { status: 400, body: { error: "status is invalid." } };
-  }
-
   const resource = await updateMarketingResource(id, {
     ...payload,
-    status: normalizedStatus,
   });
 
   if (!resource) {
-    return { status: 404, body: { error: "Marketing resource not found." } };
+    return { status: 404, body: { error: "Merch item not found." } };
   }
 
   return { status: 200, body: { resource } };
+}
+
+export async function createMarketingResourceIssuePayload(payload) {
+  const {
+    itemId,
+    quantity,
+    recipientName,
+    purpose,
+    issuedBy,
+    issuedAt,
+    note,
+  } = payload || {};
+
+  if (!itemId) {
+    return { status: 400, body: { error: "itemId is required." } };
+  }
+
+  if (!recipientName?.trim()) {
+    return { status: 400, body: { error: "recipientName is required." } };
+  }
+
+  if (!purpose?.trim()) {
+    return { status: 400, body: { error: "purpose is required." } };
+  }
+
+  const result = await createMarketingResourceIssue({
+    itemId,
+    quantity,
+    recipientName,
+    purpose,
+    issuedBy,
+    issuedAt,
+    note,
+  });
+
+  if (result.error) {
+    return { status: 400, body: { error: result.error } };
+  }
+
+  return { status: 200, body: result };
 }
 
 export async function logGiftPayload(payload) {
@@ -215,7 +246,7 @@ export async function askAiPayload(payload) {
   }
 
   try {
-    const clients = await listClients({ tier: FOCUS_TIER });
+    const clients = await listClients();
     const text = await askAI(question, clients);
     return { status: 200, body: { text } };
   } catch (error) {

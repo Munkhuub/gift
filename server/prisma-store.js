@@ -1,14 +1,15 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import {
+  resetMarketingResources,
   reseedPrisma,
-  seedMarketingResources,
 } from "../prisma/seed-data.js";
 import { normalizeClient } from "../src/data/clients.js";
 import { TIERS } from "../src/data/clients.js";
 import {
-  MARKETING_RESOURCE_STATUSES,
-  MARKETING_RESOURCE_TYPES,
-  normalizeMarketingResource,
+  MERCH_CATEGORIES,
+  normalizeMarketingMerchItem,
+  normalizeMarketingMerchIssue,
 } from "../src/data/marketingResources.js";
 
 function today() {
@@ -39,9 +40,16 @@ function mapPrismaClient(client) {
     first: client.firstName,
     phone: client.phoneMasked,
     tier: client.tier,
+    previousTier: client.previousTier || "",
     giftDone: client.giftDone,
+    giftStillOwed: client.giftStillOwed,
+    giftEligibilityStatus: client.giftEligibilityStatus,
     giftDate: formatDate(client.giftDate),
     loan: client.hasLoan,
+    loanOverdueDays: client.loanOverdueDays,
+    isWaitlist: client.isWaitlist,
+    tierChangedAt: formatDate(client.tierChangedAt),
+    statusReason: client.statusReason,
     note: client.note,
     giftType: client.giftType,
     deliveredBy: client.deliveredBy,
@@ -62,19 +70,31 @@ function mapGiftLog(log) {
   };
 }
 
-function mapMarketingResource(resource) {
-  return normalizeMarketingResource({
-    id: resource.id,
-    name: resource.name,
-    campaign: resource.campaign,
-    resourceType: resource.resourceType,
-    owner: resource.owner,
-    status: resource.status,
-    quantity: resource.quantity,
-    budget: resource.budget,
-    neededBy: formatDate(resource.neededBy),
-    vendor: resource.vendor,
-    note: resource.note,
+function mapMarketingMerchItem(item) {
+  return normalizeMarketingMerchItem({
+    id: item.id,
+    name: item.name,
+    category: item.category,
+    unit: item.unit,
+    totalStock: item.totalStock,
+    issuedStock: item.issuedStock,
+    storageLocation: item.storageLocation,
+    note: item.note,
+  });
+}
+
+function mapMarketingMerchIssue(issue) {
+  return normalizeMarketingMerchIssue({
+    id: issue.id,
+    itemId: issue.item.id,
+    itemName: issue.item.name,
+    category: issue.item.category,
+    quantity: issue.quantity,
+    recipientName: issue.recipientName,
+    purpose: issue.purpose,
+    issuedBy: issue.issuedBy,
+    issuedAt: formatDate(issue.issuedAt),
+    note: issue.note,
   });
 }
 
@@ -107,6 +127,8 @@ function buildClientFilters({
   tier,
   search,
   status,
+  queue,
+  overdueDays,
   giftDate,
   dateFrom,
   dateTo,
@@ -115,7 +137,9 @@ function buildClientFilters({
   const normalizedTier = typeof tier === "string" ? tier.toUpperCase() : "";
   const normalizedStatus =
     typeof status === "string" ? status.toLowerCase() : "";
+  const normalizedQueue = typeof queue === "string" ? queue.toLowerCase() : "";
   const normalizedSearch = typeof search === "string" ? search.trim() : "";
+  const normalizedOverdueDays = Number(overdueDays || 0);
   const giftDateRange = buildDateRange({
     date: giftDate,
     dateFrom,
@@ -127,11 +151,39 @@ function buildClientFilters({
   }
 
   if (normalizedStatus === "pending") {
+    where.giftStillOwed = true;
     where.giftDone = false;
   }
 
   if (normalizedStatus === "delivered") {
     where.giftDone = true;
+  }
+
+  if (normalizedQueue === "active_god") {
+    where.tier = "GOD";
+  }
+
+  if (normalizedQueue === "gift_owed") {
+    where.giftStillOwed = true;
+  }
+
+  if (normalizedQueue === "former_god_owed") {
+    where.previousTier = "GOD";
+    where.giftStillOwed = true;
+    where.NOT = { tier: "GOD" };
+  }
+
+  if (normalizedQueue === "waitlist_god") {
+    where.tier = "GOD";
+    where.isWaitlist = true;
+  }
+
+  if (normalizedQueue === "overdue") {
+    where.loanOverdueDays = {
+      gte: Number.isFinite(normalizedOverdueDays) && normalizedOverdueDays > 0
+        ? normalizedOverdueDays
+        : 5,
+    };
   }
 
   if (normalizedSearch) {
@@ -154,6 +206,18 @@ function buildClientFilters({
           mode: "insensitive",
         },
       },
+      {
+        note: {
+          contains: normalizedSearch,
+          mode: "insensitive",
+        },
+      },
+      {
+        statusReason: {
+          contains: normalizedSearch,
+          mode: "insensitive",
+        },
+      },
     ];
   }
 
@@ -164,54 +228,35 @@ function buildClientFilters({
   return where;
 }
 
-function buildMarketingResourceFilters({
-  status,
-  resourceType,
+function buildMarketingInventoryFilters({
+  category,
   search,
-  neededBy,
-  dateFrom,
-  dateTo,
 } = {}) {
   const where = {};
-  const normalizedStatus =
-    typeof status === "string" ? status.toUpperCase() : "";
-  const normalizedType =
-    typeof resourceType === "string" ? resourceType.toUpperCase() : "";
+  const normalizedCategory =
+    typeof category === "string" ? category.toUpperCase() : "";
   const normalizedSearch = typeof search === "string" ? search.trim() : "";
-  const neededByRange = buildDateRange({
-    date: neededBy,
-    dateFrom,
-    dateTo,
-  });
 
-  if (MARKETING_RESOURCE_STATUSES.includes(normalizedStatus)) {
-    where.status = normalizedStatus;
-  }
-
-  if (MARKETING_RESOURCE_TYPES.includes(normalizedType)) {
-    where.resourceType = normalizedType;
+  if (MERCH_CATEGORIES.includes(normalizedCategory)) {
+    where.category = normalizedCategory;
   }
 
   if (normalizedSearch) {
     where.OR = [
       { name: { contains: normalizedSearch, mode: "insensitive" } },
-      { campaign: { contains: normalizedSearch, mode: "insensitive" } },
-      { owner: { contains: normalizedSearch, mode: "insensitive" } },
-      { vendor: { contains: normalizedSearch, mode: "insensitive" } },
+      { storageLocation: { contains: normalizedSearch, mode: "insensitive" } },
+      { note: { contains: normalizedSearch, mode: "insensitive" } },
     ];
-  }
-
-  if (neededByRange) {
-    where.neededBy = neededByRange;
   }
 
   return where;
 }
 
 async function ensurePrismaSeeded() {
-  const [clientCount, marketingResourceCount] = await Promise.all([
+  const [clientCount, merchItemCount, merchIssueCount] = await Promise.all([
     prisma.client.count(),
-    prisma.marketingResource.count(),
+    prisma.marketingMerchItem.count(),
+    prisma.marketingMerchIssue.count(),
   ]);
 
   if (clientCount === 0) {
@@ -219,8 +264,8 @@ async function ensurePrismaSeeded() {
     return;
   }
 
-  if (marketingResourceCount === 0) {
-    await seedMarketingResources(prisma);
+  if (merchItemCount === 0 || merchIssueCount === 0) {
+    await resetMarketingResources(prisma);
   }
 }
 
@@ -296,56 +341,43 @@ export async function listGiftLogs({
 
 export async function listMarketingResources(filters = {}) {
   await ensureClientStore();
-  const resources = await prisma.marketingResource.findMany({
-    where: buildMarketingResourceFilters(filters),
-    orderBy: [{ neededBy: "asc" }, { id: "asc" }],
+  const resources = await prisma.marketingMerchItem.findMany({
+    where: buildMarketingInventoryFilters(filters),
+    orderBy: [{ name: "asc" }, { id: "asc" }],
   });
 
-  return resources.map(mapMarketingResource);
+  return resources.map(mapMarketingMerchItem);
 }
 
 export async function createMarketingResource({
   name,
-  campaign,
-  resourceType,
-  owner,
-  status,
-  quantity,
-  budget,
-  neededBy,
-  vendor,
+  category,
+  unit,
+  totalStock,
+  storageLocation,
   note,
 }) {
   await ensureClientStore();
 
-  const created = await prisma.marketingResource.create({
+  const created = await prisma.marketingMerchItem.create({
     data: {
       name: name.trim(),
-      campaign: campaign?.trim() || "",
-      resourceType,
-      owner: owner?.trim() || "",
-      status,
-      quantity:
-        quantity === null || quantity === undefined || quantity === ""
-          ? null
-          : Number(quantity),
-      budget:
-        budget === null || budget === undefined || budget === ""
-          ? null
-          : Number(budget),
-      neededBy: toDate(neededBy),
-      vendor: vendor?.trim() || "",
+      category,
+      unit: unit?.trim() || "pcs",
+      totalStock: Number(totalStock || 0),
+      issuedStock: 0,
+      storageLocation: storageLocation?.trim() || "",
       note: note?.trim() || "",
     },
   });
 
-  return mapMarketingResource(created);
+  return mapMarketingMerchItem(created);
 }
 
 export async function updateMarketingResource(resourceId, updates = {}) {
   await ensureClientStore();
   const id = Number(resourceId);
-  const existing = await prisma.marketingResource.findUnique({
+  const existing = await prisma.marketingMerchItem.findUnique({
     where: { id },
   });
 
@@ -355,56 +387,194 @@ export async function updateMarketingResource(resourceId, updates = {}) {
 
   const data = {};
 
-  if (typeof updates.status === "string") {
-    data.status = updates.status.toUpperCase();
+  if (typeof updates.storageLocation === "string") {
+    data.storageLocation = updates.storageLocation.trim();
   }
 
-  if (typeof updates.owner === "string") {
-    data.owner = updates.owner.trim();
+  if (typeof updates.unit === "string") {
+    data.unit = updates.unit.trim();
   }
 
   if (typeof updates.note === "string") {
     data.note = updates.note.trim();
   }
 
-  if (typeof updates.vendor === "string") {
-    data.vendor = updates.vendor.trim();
-  }
-
-  if (typeof updates.neededBy === "string") {
-    data.neededBy = toDate(updates.neededBy);
-  }
-
   if (
-    updates.quantity === null ||
-    updates.quantity === "" ||
-    updates.quantity === undefined
+    updates.totalStock === null ||
+    updates.totalStock === "" ||
+    updates.totalStock === undefined
   ) {
-    if ("quantity" in updates) {
-      data.quantity = null;
+    if ("totalStock" in updates) {
+      data.totalStock = existing.totalStock;
     }
   } else {
-    data.quantity = Number(updates.quantity);
-  }
-
-  if (
-    updates.budget === null ||
-    updates.budget === "" ||
-    updates.budget === undefined
-  ) {
-    if ("budget" in updates) {
-      data.budget = null;
+    data.totalStock = Number(updates.totalStock);
+    if (data.totalStock < existing.issuedStock) {
+      data.totalStock = existing.issuedStock;
     }
-  } else {
-    data.budget = Number(updates.budget);
   }
 
-  const updated = await prisma.marketingResource.update({
+  const updated = await prisma.marketingMerchItem.update({
     where: { id },
     data,
   });
 
-  return mapMarketingResource(updated);
+  return mapMarketingMerchItem(updated);
+}
+
+export async function listMarketingResourceIssues({
+  limit = 12,
+  itemId,
+  date,
+  dateFrom,
+  dateTo,
+  search,
+} = {}) {
+  await ensureClientStore();
+  const parsedLimit = Number(limit);
+  const take = Number.isFinite(parsedLimit)
+    ? Math.max(1, Math.min(parsedLimit, 50))
+    : 12;
+  const where = {};
+  const issuedAtRange = buildDateRange({ date, dateFrom, dateTo });
+  const normalizedSearch = typeof search === "string" ? search.trim() : "";
+
+  if (itemId) {
+    where.itemId = Number(itemId);
+  }
+
+  if (issuedAtRange) {
+    where.issuedAt = issuedAtRange;
+  }
+
+  if (normalizedSearch) {
+    where.OR = [
+      { recipientName: { contains: normalizedSearch, mode: "insensitive" } },
+      { purpose: { contains: normalizedSearch, mode: "insensitive" } },
+      { issuedBy: { contains: normalizedSearch, mode: "insensitive" } },
+      { note: { contains: normalizedSearch, mode: "insensitive" } },
+      {
+        item: {
+          name: { contains: normalizedSearch, mode: "insensitive" },
+        },
+      },
+    ];
+  }
+
+  const issues = await prisma.marketingMerchIssue.findMany({
+    take,
+    where,
+    orderBy: [{ issuedAt: "desc" }, { id: "desc" }],
+    include: {
+      item: {
+        select: {
+          id: true,
+          name: true,
+          category: true,
+        },
+      },
+    },
+  });
+
+  return issues.map(mapMarketingMerchIssue);
+}
+
+export async function createMarketingResourceIssue({
+  itemId,
+  quantity,
+  recipientName,
+  purpose,
+  issuedBy,
+  issuedAt,
+  note,
+}) {
+  await ensureClientStore();
+  const id = Number(itemId);
+  const parsedQuantity = Number(quantity || 0);
+  const existing = await prisma.marketingMerchItem.findUnique({
+    where: { id },
+  });
+
+  if (!existing) {
+    return { error: "Merch item not found." };
+  }
+
+  const remainingStock = Math.max(existing.totalStock - existing.issuedStock, 0);
+
+  if (!Number.isFinite(parsedQuantity) || parsedQuantity <= 0) {
+    return { error: "quantity must be greater than 0." };
+  }
+
+  if (parsedQuantity > remainingStock) {
+    return {
+      error: `Only ${remainingStock} item${remainingStock === 1 ? "" : "s"} remain in stock.`,
+    };
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const lockedRows = await tx.$queryRaw(
+      Prisma.sql`
+        UPDATE "marketing_merch_items"
+        SET "issuedStock" = "issuedStock" + ${parsedQuantity}
+        WHERE "id" = ${id}
+          AND ("totalStock" - "issuedStock") >= ${parsedQuantity}
+        RETURNING
+          "id",
+          "name",
+          "category",
+          "unit",
+          "totalStock",
+          "issuedStock",
+          "storageLocation",
+          "note"
+      `,
+    );
+
+    if (!Array.isArray(lockedRows) || lockedRows.length === 0) {
+      const latest = await tx.marketingMerchItem.findUnique({
+        where: { id },
+        select: {
+          totalStock: true,
+          issuedStock: true,
+        },
+      });
+      const latestRemaining = latest
+        ? Math.max(latest.totalStock - latest.issuedStock, 0)
+        : 0;
+
+      return {
+        error: `Only ${latestRemaining} item${latestRemaining === 1 ? "" : "s"} remain in stock.`,
+      };
+    }
+
+    const issue = await tx.marketingMerchIssue.create({
+      data: {
+        itemId: id,
+        quantity: parsedQuantity,
+        recipientName: recipientName?.trim() || "",
+        purpose: purpose?.trim() || "",
+        issuedBy: issuedBy?.trim() || "",
+        issuedAt: toDate(issuedAt) || new Date(),
+        note: note?.trim() || "",
+      },
+      include: {
+        item: {
+          select: {
+            id: true,
+            name: true,
+            category: true,
+          },
+        },
+      },
+    });
+
+    return {
+      item: mapMarketingMerchItem(lockedRows[0]),
+      issue: mapMarketingMerchIssue(issue),
+    };
+  });
+
+  return result;
 }
 
 export async function markClientDelivered(clientId, giftDate = today()) {
@@ -432,6 +602,8 @@ export async function markClientDelivered(clientId, giftDate = today()) {
       where: { id },
       data: {
         giftDone: true,
+        giftStillOwed: false,
+        giftEligibilityStatus: "DELIVERED",
         giftDate: toDate(giftDate),
         giftType: existing.giftType || "Gift delivery",
       },
@@ -478,6 +650,8 @@ export async function logGiftDelivery({
       where: { id },
       data: {
         giftDone: true,
+        giftStillOwed: false,
+        giftEligibilityStatus: "DELIVERED",
         giftDate: toDate(giftDate),
         giftType,
         deliveredBy: staffName,

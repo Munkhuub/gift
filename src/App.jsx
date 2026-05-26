@@ -8,18 +8,19 @@ import {
   createMarketingResource,
   fetchClients,
   fetchGiftHistory,
+  fetchMarketingIssues,
   fetchMarketingResources,
+  issueMarketingResource,
   logGiftDelivery,
   markClientDelivered,
   updateMarketingResource,
 } from "./lib/api";
 
-const FOCUS_TIER = "GOD";
 const TABS = [
   { id: 'dashboard', label: '📊 Dashboard' },
-  { id: 'clients', label: '👑 GOD Clients' },
-  { id: 'log', label: '✏️ Log GOD Gift' },
-  { id: 'marketing', label: '📦 Marketing Resources' },
+  { id: 'clients', label: '👑 Gift Queue' },
+  { id: 'log', label: '✏️ Log Gift' },
+  { id: 'marketing', label: '🎒 Merch Tracker' },
   { id: 'ai', label: '🤖 AI Assistant' },
 ];
 
@@ -28,26 +29,41 @@ export default function App() {
   const [clients, setClients] = useState([]);
   const [history, setHistory] = useState([]);
   const [marketingResources, setMarketingResources] = useState([]);
+  const [marketingIssues, setMarketingIssues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const loadGiftHistory = async () => {
-    setHistory(await fetchGiftHistory({ limit: 8, tier: FOCUS_TIER }));
+    setHistory(await fetchGiftHistory({ limit: 8 }));
   };
 
-  const loadMarketingResources = async () => {
-    setMarketingResources(await fetchMarketingResources());
+  const loadMarketingResources = async (filters = {}) => {
+    const resources = await fetchMarketingResources(filters);
+    setMarketingResources(resources);
+    return resources;
+  };
+
+  const loadMarketingIssues = async (filters = {}) => {
+    const issues = await fetchMarketingIssues({ limit: 20, ...filters });
+    setMarketingIssues(issues);
+    return issues;
   };
 
   const loadData = async () => {
     try {
       setError("");
       setLoading(true);
-      const [clientsResult, historyResult, marketingResourcesResult] =
+      const [
+        clientsResult,
+        historyResult,
+        marketingResourcesResult,
+        marketingIssuesResult,
+      ] =
         await Promise.allSettled([
-        fetchClients({ tier: FOCUS_TIER }),
-        fetchGiftHistory({ limit: 8, tier: FOCUS_TIER }),
+        fetchClients(),
+        fetchGiftHistory({ limit: 8 }),
         fetchMarketingResources(),
+        fetchMarketingIssues({ limit: 20 }),
       ]);
 
       if (clientsResult.status === "fulfilled") {
@@ -68,6 +84,12 @@ export default function App() {
         setMarketingResources([]);
       }
 
+      if (marketingIssuesResult.status === "fulfilled") {
+        setMarketingIssues(marketingIssuesResult.value);
+      } else {
+        setMarketingIssues([]);
+      }
+
       const errors = [];
 
       if (clientsResult.status === "rejected") {
@@ -85,6 +107,12 @@ export default function App() {
       if (marketingResourcesResult.status === "rejected") {
         errors.push(
           `Marketing API: ${marketingResourcesResult.reason?.message || "Could not load marketing resources."}`,
+        );
+      }
+
+      if (marketingIssuesResult.status === "rejected") {
+        errors.push(
+          `Marketing issue API: ${marketingIssuesResult.reason?.message || "Could not load marketing issues."}`,
         );
       }
 
@@ -156,6 +184,24 @@ export default function App() {
     }
   };
 
+  const issueMarketingEntry = async (payload) => {
+    try {
+      setError("");
+      const result = await issueMarketingResource(payload);
+      try {
+        await Promise.all([loadMarketingResources(), loadMarketingIssues()]);
+      } catch (marketingError) {
+        setError(
+          marketingError.message || "Could not refresh merch tracker data.",
+        );
+      }
+      return result;
+    } catch (err) {
+      setError(err.message || "Could not record merch issue.");
+      return null;
+    }
+  };
+
   const updateMarketingEntry = async (id, updates) => {
     try {
       setError("");
@@ -170,7 +216,9 @@ export default function App() {
     }
   };
 
-  const pending = clients.filter(c => !c.giftDone).length;
+  const pending = clients.filter(
+    (client) => client.giftStillOwed && !client.giftDone,
+  ).length;
 
   return (
     <div style={{ minHeight: '100vh', background: '#F8FAFC', fontFamily: "'DM Sans', 'Segoe UI', sans-serif" }}>
@@ -182,11 +230,11 @@ export default function App() {
             <span style={{ fontSize: 20 }}>🎁</span>
             <span style={{ fontSize: 15, fontWeight: 600, color: '#1E293B' }}>Gift Intelligence Hub</span>
             <span style={{ fontSize: 11, background: '#F0F4FF', color: '#1E3A8A', border: '1px solid #BFDBFE', borderRadius: 99, padding: '2px 8px', fontWeight: 500 }}>Pocket AI Hackathon 2026</span>
-            <span style={{ fontSize: 11, background: '#FFF8ED', color: '#92400E', border: '1px solid #FCD34D', borderRadius: 99, padding: '2px 8px', fontWeight: 600 }}>GOD-tier operations</span>
+            <span style={{ fontSize: 11, background: '#FFF8ED', color: '#92400E', border: '1px solid #FCD34D', borderRadius: 99, padding: '2px 8px', fontWeight: 600 }}>Daily GOD + owed-gift tracker</span>
           </div>
           {pending > 0 && (
             <div style={{ fontSize: 12, background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', borderRadius: 99, padding: '4px 12px', fontWeight: 500 }}>
-              {pending} GOD gift{pending > 1 ? 's' : ''} pending
+              {pending} gift obligation{pending > 1 ? 's' : ''} open
             </div>
           )}
         </div>
@@ -217,7 +265,7 @@ export default function App() {
           </div>
         ) : clients.length === 0 && !error ? (
           <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: 32, textAlign: 'center', color: '#64748B', fontSize: 14 }}>
-            No GOD-tier client data is available yet.
+            No tracked client data is available yet.
           </div>
         ) : (
           <>
@@ -227,7 +275,10 @@ export default function App() {
             {tab === 'marketing' && (
               <MarketingResources
                 initialResources={marketingResources}
+                initialIssues={marketingIssues}
                 onCreate={createMarketingEntry}
+                onFilterIssues={loadMarketingIssues}
+                onIssue={issueMarketingEntry}
                 onUpdate={updateMarketingEntry}
               />
             )}
