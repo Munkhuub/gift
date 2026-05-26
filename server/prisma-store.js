@@ -46,7 +46,9 @@ function mapPrismaClient(client) {
     giftEligibilityStatus: client.giftEligibilityStatus,
     giftDate: formatDate(client.giftDate),
     loan: client.hasLoan,
-    loanOverdueDays: client.loanOverdueDays,
+    pickupNotified: client.pickupNotified,
+    pickupCenter: client.pickupCenter,
+    pickupNotifiedAt: formatDate(client.pickupNotifiedAt),
     isWaitlist: client.isWaitlist,
     tierChangedAt: formatDate(client.tierChangedAt),
     statusReason: client.statusReason,
@@ -128,7 +130,6 @@ function buildClientFilters({
   search,
   status,
   queue,
-  overdueDays,
   giftDate,
   dateFrom,
   dateTo,
@@ -139,7 +140,6 @@ function buildClientFilters({
     typeof status === "string" ? status.toLowerCase() : "";
   const normalizedQueue = typeof queue === "string" ? queue.toLowerCase() : "";
   const normalizedSearch = typeof search === "string" ? search.trim() : "";
-  const normalizedOverdueDays = Number(overdueDays || 0);
   const giftDateRange = buildDateRange({
     date: giftDate,
     dateFrom,
@@ -176,14 +176,6 @@ function buildClientFilters({
   if (normalizedQueue === "waitlist_god") {
     where.tier = "GOD";
     where.isWaitlist = true;
-  }
-
-  if (normalizedQueue === "overdue") {
-    where.loanOverdueDays = {
-      gte: Number.isFinite(normalizedOverdueDays) && normalizedOverdueDays > 0
-        ? normalizedOverdueDays
-        : 5,
-    };
   }
 
   if (normalizedSearch) {
@@ -588,6 +580,10 @@ export async function markClientDelivered(clientId, giftDate = today()) {
     return null;
   }
 
+  if (existing.giftDone) {
+    return { error: "Энэ харилцагчийн бэлэг аль хэдийн хүргэгдсэн байна." };
+  }
+
   const [, updated] = await prisma.$transaction([
     prisma.giftLog.create({
       data: {
@@ -610,7 +606,7 @@ export async function markClientDelivered(clientId, giftDate = today()) {
     }),
   ]);
 
-  return mapPrismaClient(updated);
+  return { client: mapPrismaClient(updated) };
 }
 
 export async function logGiftDelivery({
@@ -620,6 +616,7 @@ export async function logGiftDelivery({
   deliveredBy,
   loan,
   note,
+  items,
 }) {
   await ensureClientStore();
   const id = Number(clientId);
@@ -628,6 +625,7 @@ export async function logGiftDelivery({
   const staffName = deliveredBy || "";
   const hasLoan = Boolean(loan);
   const clientNote = note || "";
+  const requestedItems = Array.isArray(items) ? items : [];
   const existing = await prisma.client.findUnique({
     where: { id },
   });
@@ -636,30 +634,164 @@ export async function logGiftDelivery({
     return null;
   }
 
-  const [, updated] = await prisma.$transaction([
-    prisma.giftLog.create({
-      data: {
-        clientId: id,
-        giftType: giftType || "Gift delivery",
-        deliveredBy: staffName || null,
-        note: clientNote,
-        deliveredAt: toDate(giftDate) || new Date(),
-      },
-    }),
-    prisma.client.update({
-      where: { id },
-      data: {
-        giftDone: true,
-        giftStillOwed: false,
-        giftEligibilityStatus: "DELIVERED",
-        giftDate: toDate(giftDate),
-        giftType,
-        deliveredBy: staffName,
-        hasLoan,
-        note: clientNote,
-      },
-    }),
-  ]);
+  if (existing.giftDone) {
+    return { error: "Энэ харилцагчийн бэлэг аль хэдийн хүргэгдсэн байна." };
+  }
+
+  // Normalize & validate inventory items (optional).
+  const normalizedItems = requestedItems
+    .map((entry) => ({
+      itemId: Number(entry?.itemId),
+      quantity: Number(entry?.quantity ?? 1),
+    }))
+    .filter((entry) => Number.isFinite(entry.itemId) && entry.itemId > 0)
+    .map((entry) => ({
+      itemId: entry.itemId,
+      quantity:
+        Number.isFinite(entry.quantity) && entry.quantity > 0
+          ? Math.floor(entry.quantity)
+          : 1,
+    }));
+
+  // Merge duplicates by itemId.
+  const byId = new Map();
+  for (const entry of normalizedItems) {
+    byId.set(entry.itemId, (byId.get(entry.itemId) || 0) + entry.quantity);
+  }
+  const mergedItems = Array.from(byId, ([itemId, quantity]) => ({
+    itemId,
+    quantity,
+  }));
+
+  try {
+    const updated = await prisma.$transaction(async (tx) => {
+      const deliveredAt = toDate(giftDate) || new Date();
+      const clientName = `${existing.lastName} ${existing.firstName}`.trim();
+
+      // 1) Deduct from marketing inventory & write issue audit rows.
+      let inventoryNames = [];
+      if (mergedItems.length > 0) {
+        for (const entry of mergedItems) {
+          const lockedRows = await tx.$queryRaw(
+            Prisma.sql`
+              UPDATE "marketing_merch_items"
+              SET "issuedStock" = "issuedStock" + ${entry.quantity}
+              WHERE "id" = ${entry.itemId}
+                AND ("totalStock" - "issuedStock") >= ${entry.quantity}
+              RETURNING "id", "name", "category"
+            `,
+          );
+
+          if (!Array.isArray(lockedRows) || lockedRows.length === 0) {
+            const latest = await tx.marketingMerchItem.findUnique({
+              where: { id: entry.itemId },
+              select: { name: true, totalStock: true, issuedStock: true },
+            });
+            const remaining = latest
+              ? Math.max(latest.totalStock - latest.issuedStock, 0)
+              : 0;
+            const itemName = latest?.name || "Merch item";
+            throw new Error(`${itemName}: үлдэгдэл хүрэлцэхгүй байна (үлдсэн: ${remaining}).`);
+          }
+
+          const row = lockedRows[0];
+          inventoryNames.push(row?.name || "");
+
+          await tx.marketingMerchIssue.create({
+            data: {
+              itemId: entry.itemId,
+              quantity: entry.quantity,
+              recipientName: clientName,
+              purpose: "VIP бэлэг хүргэлт",
+              issuedBy: staffName?.trim() || "",
+              issuedAt: deliveredAt,
+              note: clientNote?.trim()
+                ? `clientId=${id} • ${clientNote.trim()}`
+                : `clientId=${id}`,
+            },
+          });
+        }
+      }
+
+      // 2) Create gift log + update client status.
+      const resolvedGiftType =
+        giftType ||
+        inventoryNames.filter(Boolean).join(" • ") ||
+        "Gift delivery";
+
+      await tx.giftLog.create({
+        data: {
+          clientId: id,
+          giftType: resolvedGiftType,
+          deliveredBy: staffName || null,
+          note: clientNote,
+          deliveredAt,
+        },
+      });
+
+      const clientRow = await tx.client.update({
+        where: { id },
+        data: {
+          giftDone: true,
+          giftStillOwed: false,
+          giftEligibilityStatus: "DELIVERED",
+          giftDate: deliveredAt,
+          giftType: resolvedGiftType,
+          deliveredBy: staffName,
+          hasLoan,
+          note: clientNote,
+        },
+      });
+
+      return clientRow;
+    });
+
+    return { client: mapPrismaClient(updated) };
+  } catch (error) {
+    return { error: error?.message || "Inventory update failed." };
+  }
+}
+
+export async function updateClient(clientId, updates = {}) {
+  await ensureClientStore();
+  const id = Number(clientId);
+  const existing = await prisma.client.findUnique({
+    where: { id },
+  });
+
+  if (!existing) {
+    return null;
+  }
+
+  const data = {};
+
+  if (typeof updates.hasLoan === "boolean") {
+    data.hasLoan = updates.hasLoan;
+  }
+
+  if (typeof updates.pickupNotified === "boolean") {
+    data.pickupNotified = updates.pickupNotified;
+    if (updates.pickupNotified) {
+      // Allow caller to explicitly set the date; fallback to "now".
+      const explicitDate = toDate(updates.pickupNotifiedAt);
+      data.pickupNotifiedAt = explicitDate || new Date();
+    } else {
+      data.pickupNotifiedAt = null;
+    }
+  }
+
+  if (typeof updates.pickupCenter === "string") {
+    data.pickupCenter = updates.pickupCenter.trim();
+  }
+
+  if (typeof updates.note === "string") {
+    data.note = updates.note.trim();
+  }
+
+  const updated = await prisma.client.update({
+    where: { id },
+    data,
+  });
 
   return mapPrismaClient(updated);
 }

@@ -10,6 +10,7 @@ import {
   listMarketingResourceIssues,
   logGiftDelivery,
   markClientDelivered,
+  updateClient,
   updateMarketingResource,
 } from "./store.js";
 import {
@@ -78,7 +79,6 @@ export async function getClientsPayload(query = {}) {
     search: query.search,
     status: query.status,
     queue: query.queue,
-    overdueDays: query.overdueDays,
     giftDate: query.giftDate,
     dateFrom: query.dateFrom,
     dateTo: query.dateTo,
@@ -98,11 +98,14 @@ export async function getGiftHistoryPayload(query = {}) {
 }
 
 export async function deliverClientPayload(id) {
-  const client = await markClientDelivered(id);
-  if (!client) {
+  const result = await markClientDelivered(id);
+  if (!result) {
     return { status: 404, body: { error: "Client not found." } };
   }
-  return { status: 200, body: { client } };
+  if (result.error) {
+    return { status: 400, body: { error: result.error } };
+  }
+  return { status: 200, body: { client: result.client } };
 }
 
 export async function getMarketingResourcesPayload(query = {}) {
@@ -216,19 +219,48 @@ export async function createMarketingResourceIssuePayload(payload) {
 }
 
 export async function logGiftPayload(payload) {
-  const { clientId, date, type, deliveredBy, loan, note } = payload || {};
+  const { clientId, date, type, deliveredBy, loan, note, items } = payload || {};
 
   if (!clientId) {
     return { status: 400, body: { error: "clientId is required." } };
   }
 
-  const client = await logGiftDelivery({
+  const result = await logGiftDelivery({
     clientId,
     date,
     type,
     deliveredBy,
     loan,
     note,
+    items,
+  });
+
+  if (!result) {
+    return { status: 404, body: { error: "Client not found." } };
+  }
+
+  if (result.error) {
+    return { status: 400, body: { error: result.error } };
+  }
+
+  return { status: 200, body: { client: result.client } };
+}
+
+export async function updateClientPayload(id, payload) {
+  const updates = payload || {};
+  const client = await updateClient(id, {
+    hasLoan: typeof updates.hasLoan === "boolean" ? updates.hasLoan : undefined,
+    pickupNotified:
+      typeof updates.pickupNotified === "boolean"
+        ? updates.pickupNotified
+        : undefined,
+    pickupCenter:
+      typeof updates.pickupCenter === "string" ? updates.pickupCenter : undefined,
+    pickupNotifiedAt:
+      typeof updates.pickupNotifiedAt === "string"
+        ? updates.pickupNotifiedAt
+        : undefined,
+    note: typeof updates.note === "string" ? updates.note : undefined,
   });
 
   if (!client) {

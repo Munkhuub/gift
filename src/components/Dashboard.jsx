@@ -10,7 +10,7 @@ const tierColors = {
 
 function StatusBadge({ client }) {
   if (client.previousTier === "GOD" && client.tier !== "GOD" && client.giftStillOwed) {
-    return badge("Former GOD • still owed", "#FEF2F2", "#B91C1C", "#FECACA");
+    return badge("Өмнөх GOD • бэлэг дутуу", "#FEF2F2", "#B91C1C", "#FECACA");
   }
 
   if (client.isWaitlist && client.tier === "GOD") {
@@ -18,10 +18,10 @@ function StatusBadge({ client }) {
   }
 
   if (client.giftDone) {
-    return badge("Delivered", "#F0FDF4", "#15803D", "#BBF7D0");
+    return badge("Хүргэгдсэн", "#F0FDF4", "#15803D", "#BBF7D0");
   }
 
-  return badge("Active GOD queue", "#EFF6FF", "#1D4ED8", "#BFDBFE");
+  return badge("Идэвхтэй дараалал", "#EFF6FF", "#1D4ED8", "#BFDBFE");
 }
 
 function badge(label, bg, color, border) {
@@ -42,7 +42,7 @@ function badge(label, bg, color, border) {
   );
 }
 
-export default function Dashboard({ clients, history, onMarkDelivered }) {
+export default function Dashboard({ clients, history, onOpenLogGift }) {
   const [historyDate, setHistoryDate] = useState("");
   const [historyItems, setHistoryItems] = useState(history);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -63,7 +63,6 @@ export default function Dashboard({ clients, history, onMarkDelivered }) {
     const waitlistGod = clients.filter(
       (client) => client.isWaitlist && client.tier === "GOD" && !client.giftDone,
     );
-    const overdue = clients.filter((client) => (client.loanOverdueDays || 0) >= 5);
     const recentChanges = clients
       .filter((client) => client.tierChangedAt)
       .sort((a, b) => b.tierChangedAt.localeCompare(a.tierChangedAt))
@@ -74,7 +73,6 @@ export default function Dashboard({ clients, history, onMarkDelivered }) {
       owedQueue,
       formerGodOwed,
       waitlistGod,
-      overdue,
       recentChanges,
       delivered: clients.filter((client) => client.giftDone),
     };
@@ -139,34 +137,101 @@ export default function Dashboard({ clients, history, onMarkDelivered }) {
         >
           <span style={{ fontSize: 18 }}>⚠️</span>
           <span>
-            <strong>{metrics.formerGodOwed.length}</strong> former GOD client
-            {metrics.formerGodOwed.length > 1 ? "s" : ""} dropped out of the live
-            GOD list but still owe a gift. This is the Excel gap the app closes.
+            <strong>{metrics.formerGodOwed.length}</strong> харилцагч одоогийн
+            GOD жагсаалтаас буусан ч бэлгийн үүрэг нь нээлттэй хэвээр байна.
           </span>
         </div>
       )}
 
       <div
         style={{
+          background:
+            "linear-gradient(135deg, rgba(255,248,237,0.95), rgba(239,246,255,0.95))",
+          border: "1px solid #E2E8F0",
+          borderRadius: 18,
+          padding: 20,
+          marginBottom: 20,
           display: "grid",
-          gridTemplateColumns: "repeat(5, 1fr)",
+          gridTemplateColumns: "minmax(0, 1.2fr) minmax(260px, 0.8fr)",
+          gap: 16,
+          alignItems: "center",
+        }}
+      >
+        <div>
+          <div
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              color: "#92400E",
+              marginBottom: 8,
+            }}
+          >
+            Өнөөдрийн хураангуй
+          </div>
+          <div
+            style={{
+              fontSize: 24,
+              fontWeight: 700,
+              color: "#1E293B",
+              lineHeight: 1.2,
+              marginBottom: 10,
+            }}
+          >
+            GOD бэлгийн дарааллыг нэг дэлгэцээс хурдан шийдвэрлэх самбар
+          </div>
+          <div style={{ fontSize: 13, color: "#475569", lineHeight: 1.7 }}>
+            Нээлттэй бэлгийн үүрэг, эрсдэлтэй харилцагч, waitlist-ээс шинээр орж
+            ирсэн GOD хэрэглэгч, сүүлийн хүргэлтийн урсгалыг эндээс шууд харна.
+          </div>
+        </div>
+
+        <div
+          style={{
+            background: "rgba(255,255,255,0.7)",
+            border: "1px solid rgba(226,232,240,0.9)",
+            borderRadius: 16,
+            padding: 18,
+          }}
+        >
+          <div style={{ fontSize: 12, color: "#64748B", marginBottom: 8 }}>
+            Яг одоо анхаарах зүйл
+          </div>
+          <div style={{ fontSize: 34, fontWeight: 800, color: "#DC2626", lineHeight: 1 }}>
+            {metrics.owedQueue.length}
+          </div>
+          <div style={{ marginTop: 8, fontSize: 13, color: "#475569", lineHeight: 1.6 }}>
+            нээлттэй бэлгийн үүрэг байна.
+            <br />
+            {metrics.formerGodOwed.length > 0
+              ? `${metrics.formerGodOwed.length} нь эрсдэлтэй бүлэгт байна.`
+              : "Эрсдэлтэй бүлэг одоогоор алга."}
+          </div>
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
           gap: 12,
           marginBottom: 24,
         }}
       >
         {[
           {
-            label: "Current GOD now",
+            label: "Одоогийн GOD",
             value: metrics.activeGod.length,
             color: "#1E293B",
           },
           {
-            label: "Gift queue open",
+            label: "Нээлттэй дараалал",
             value: metrics.owedQueue.length,
             color: metrics.owedQueue.length > 0 ? "#DC2626" : "#16A34A",
           },
           {
-            label: "Former GOD still owed",
+            label: "Буусан ч бэлэг дутуу",
             value: metrics.formerGodOwed.length,
             color: metrics.formerGodOwed.length > 0 ? "#B91C1C" : "#16A34A",
           },
@@ -175,19 +240,15 @@ export default function Dashboard({ clients, history, onMarkDelivered }) {
             value: metrics.waitlistGod.length,
             color: metrics.waitlistGod.length > 0 ? "#15803D" : "#64748B",
           },
-          {
-            label: "Loan overdue 5d+",
-            value: metrics.overdue.length,
-            color: metrics.overdue.length > 0 ? "#C2410C" : "#16A34A",
-          },
         ].map((metric) => (
           <div
             key={metric.label}
             style={{
-              background: "#F8FAFC",
-              borderRadius: 10,
+              background: "#fff",
+              borderRadius: 14,
               padding: "14px 16px",
               border: "1px solid #E2E8F0",
+              boxShadow: "0 8px 24px rgba(15, 23, 42, 0.04)",
             }}
           >
             <div
@@ -211,7 +272,7 @@ export default function Dashboard({ clients, history, onMarkDelivered }) {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "1.2fr 0.8fr",
+          gridTemplateColumns: "minmax(0, 1.2fr) minmax(280px, 0.8fr)",
           gap: 18,
           marginBottom: 24,
         }}
@@ -227,7 +288,7 @@ export default function Dashboard({ clients, history, onMarkDelivered }) {
               marginBottom: 12,
             }}
           >
-            Gift obligation queue
+            Бэлгийн үүргийн дараалал
           </div>
           {metrics.owedQueue.length === 0 ? (
             <div
@@ -241,48 +302,44 @@ export default function Dashboard({ clients, history, onMarkDelivered }) {
                 border: "1px solid #BBF7D0",
               }}
             >
-              All tracked gift obligations are closed.
+              Бүх бэлгийн үүрэг хаагдсан байна.
             </div>
           ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <thead>
-                <tr style={{ borderBottom: "2px solid #E2E8F0" }}>
-                  {[
-                    "Name",
-                    "Current tier",
-                    "Queue status",
-                    "Overdue",
-                    "Action",
-                  ].map((header) => (
-                    <th
-                      key={header}
-                      style={{
-                        textAlign: "left",
-                        padding: "8px 10px",
-                        fontSize: 11,
-                        color: "#64748B",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.05em",
-                        fontWeight: 600,
-                      }}
-                    >
-                      {header}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {metrics.owedQueue.map((client) => {
-                  const tierColor = tierColors[client.tier] || tierColors.SILVER;
-                  return (
-                    <tr key={client.id} style={{ borderBottom: "1px solid #F1F5F9" }}>
-                      <td style={{ padding: "12px 10px" }}>
-                        <div style={{ fontWeight: 600 }}>{client.last} {client.first}</div>
-                        <div style={{ fontSize: 12, color: "#64748B" }}>
-                          {client.statusReason || client.note || "No note"}
+            <div
+              style={{
+                display: "grid",
+                gap: 10,
+              }}
+            >
+              {metrics.owedQueue.map((client) => {
+                const tierColor = tierColors[client.tier] || tierColors.SILVER;
+                return (
+                  <div
+                    key={client.id}
+                    style={{
+                      background: "#fff",
+                      border: "1px solid #E2E8F0",
+                      borderRadius: 14,
+                      padding: 14,
+                      display: "grid",
+                      gridTemplateColumns: "minmax(0, 1fr) auto",
+                      gap: 12,
+                      alignItems: "center",
+                    }}
+                  >
+                    <div>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          flexWrap: "wrap",
+                          marginBottom: 6,
+                        }}
+                      >
+                        <div style={{ fontWeight: 700, color: "#1E293B" }}>
+                          {client.last} {client.first}
                         </div>
-                      </td>
-                      <td style={{ padding: "12px 10px" }}>
                         <span
                           style={{
                             background: tierColor.bg,
@@ -291,40 +348,38 @@ export default function Dashboard({ clients, history, onMarkDelivered }) {
                             borderRadius: 99,
                             padding: "3px 10px",
                             fontSize: 11,
-                            fontWeight: 600,
+                            fontWeight: 700,
                           }}
                         >
                           {client.tier}
                         </span>
-                      </td>
-                      <td style={{ padding: "12px 10px" }}>
                         <StatusBadge client={client} />
-                      </td>
-                      <td style={{ padding: "12px 10px", color: "#475569" }}>
-                        {client.loanOverdueDays > 0 ? `${client.loanOverdueDays} day(s)` : "—"}
-                      </td>
-                      <td style={{ padding: "12px 10px" }}>
-                        <button
-                          onClick={() => onMarkDelivered(client.id)}
-                          style={{
-                            fontSize: 12,
-                            padding: "6px 14px",
-                            borderRadius: 7,
-                            border: "1px solid #E2E8F0",
-                            background: "#fff",
-                            cursor: "pointer",
-                            color: "#1E293B",
-                            fontWeight: 500,
-                          }}
-                        >
-                          Mark delivered ✓
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                      </div>
+                      <div style={{ fontSize: 12, color: "#64748B", lineHeight: 1.6 }}>
+                        {client.statusReason || client.note || "Тэмдэглэл алга"}
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => onOpenLogGift(client.id)}
+                      style={{
+                        fontSize: 12,
+                        padding: "10px 14px",
+                        borderRadius: 10,
+                        border: "1px solid #1E293B",
+                        background: "#1E293B",
+                        cursor: "pointer",
+                        color: "#fff",
+                        fontWeight: 600,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Бэлэг бүртгэх
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
 
@@ -339,7 +394,7 @@ export default function Dashboard({ clients, history, onMarkDelivered }) {
               marginBottom: 12,
             }}
           >
-            Recent portfolio changes
+            Сүүлийн өөрчлөлтүүд
           </div>
           <div
             style={{
@@ -351,7 +406,7 @@ export default function Dashboard({ clients, history, onMarkDelivered }) {
           >
             {metrics.recentChanges.length === 0 ? (
               <div style={{ padding: 18, fontSize: 13, color: "#94A3B8" }}>
-                No recent tier changes recorded.
+                Сүүлийн түвшний өөрчлөлт алга.
               </div>
             ) : (
               metrics.recentChanges.map((client, index) => (
@@ -380,7 +435,7 @@ export default function Dashboard({ clients, history, onMarkDelivered }) {
                   <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.6 }}>
                     {client.previousTier || "—"} → {client.tier}
                     <br />
-                    {client.statusReason || "No reason provided"}
+                    {client.statusReason || "Шалтгаан оруулаагүй"}
                   </div>
                 </div>
               ))
@@ -392,7 +447,7 @@ export default function Dashboard({ clients, history, onMarkDelivered }) {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "1.3fr 0.9fr",
+          gridTemplateColumns: "minmax(0, 1.3fr) minmax(260px, 0.9fr)",
           gap: 18,
           marginTop: 28,
         }}
@@ -408,7 +463,7 @@ export default function Dashboard({ clients, history, onMarkDelivered }) {
               marginBottom: 12,
             }}
           >
-            Recent delivery history
+            Сүүлийн хүргэлтийн түүх
           </div>
           <div
             style={{
@@ -426,13 +481,13 @@ export default function Dashboard({ clients, history, onMarkDelivered }) {
               style={dateInputStyle}
             />
             <button onClick={() => setHistoryDate(new Date().toISOString().split("T")[0])} style={historyFilterButtonStyle}>
-              Today
+              Өнөөдөр
             </button>
             <button onClick={() => setHistoryDate("")} style={historyFilterButtonStyle}>
-              Clear
+              Цэвэрлэх
             </button>
             <span style={{ fontSize: 12, color: "#64748B" }}>
-              Filter the full delivery history by exact day.
+              Хүргэлтийн түүхийг яг өдрөөр нь шүүнэ.
             </span>
           </div>
           <div
@@ -445,7 +500,7 @@ export default function Dashboard({ clients, history, onMarkDelivered }) {
           >
             {historyLoading ? (
               <div style={{ padding: 20, fontSize: 13, color: "#64748B" }}>
-                Loading filtered delivery history...
+                Хүргэлтийн түүх ачаалж байна...
               </div>
             ) : historyError ? (
               <div style={{ padding: 20, fontSize: 13, color: "#B91C1C" }}>
@@ -453,7 +508,7 @@ export default function Dashboard({ clients, history, onMarkDelivered }) {
               </div>
             ) : historyItems.length === 0 ? (
               <div style={{ padding: 20, fontSize: 13, color: "#94A3B8" }}>
-                No delivery history matched that day.
+                Энэ өдөрт тохирох хүргэлт алга.
               </div>
             ) : (
               historyItems.map((entry, index) => (
@@ -500,18 +555,19 @@ export default function Dashboard({ clients, history, onMarkDelivered }) {
               marginBottom: 12,
             }}
           >
-            Queue pace
+            Гүйцэтгэлийн явц
           </div>
           <div
             style={{
-              background: "#fff",
+              background:
+                "linear-gradient(180deg, rgba(255,255,255,1), rgba(248,250,252,1))",
               border: "1px solid #E2E8F0",
-              borderRadius: 12,
+              borderRadius: 16,
               padding: 18,
             }}
           >
             <div style={{ fontSize: 11, color: "#64748B", marginBottom: 8 }}>
-              COMPLETION RATE
+              ГҮЙЦЭТГЭЛИЙН ХУВЬ
             </div>
             <div style={{ fontSize: 38, fontWeight: 700, color: "#1E293B", lineHeight: 1 }}>
               {clients.length === 0
@@ -519,9 +575,31 @@ export default function Dashboard({ clients, history, onMarkDelivered }) {
                 : `${Math.round((metrics.delivered.length / clients.length) * 100)}%`}
             </div>
             <div style={{ marginTop: 12, fontSize: 12, color: "#64748B", lineHeight: 1.7 }}>
-              {metrics.delivered.length} delivered out of {clients.length} tracked clients.
+              {metrics.delivered.length} хүргэлт / нийт {clients.length} хянагдаж буй
+              харилцагч.
               <br />
-              {metrics.owedQueue.length} still sit in the open gift queue.
+              {metrics.owedQueue.length} нь одоо ч нээлттэй дараалалд байна.
+            </div>
+            <div
+              style={{
+                marginTop: 14,
+                height: 10,
+                background: "#E2E8F0",
+                borderRadius: 999,
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  width:
+                    clients.length === 0
+                      ? "0%"
+                      : `${Math.round((metrics.delivered.length / clients.length) * 100)}%`,
+                  height: "100%",
+                  borderRadius: 999,
+                  background: "linear-gradient(90deg, #16A34A, #22C55E)",
+                }}
+              />
             </div>
           </div>
         </div>

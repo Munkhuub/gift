@@ -2,17 +2,17 @@ import { useState, useRef, useEffect } from "react";
 import { askAssistant } from "../lib/api";
 
 const QUICK = [
-  "How many gift obligations are still open?",
-  "How many former GOD clients still need gifts?",
-  "Which clients should we prioritize first today?",
-  "Give me a finance summary of active GOD vs owed gift queue",
+  "Одоогоор хэдэн бэлгийн үүрэг нээлттэй байна вэ?",
+  "GOD-оос буусан мөртлөө бэлэг нь дутуу хэд байна вэ?",
+  "Өнөөдөр юуг түрүүлж анхаарах вэ?",
+  "Идэвхтэй GOD ба дутуу бэлгийн дарааллын санхүүгийн хураангуй гарга",
 ];
 
 export default function AIAssistant() {
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      text: "Hello! I can answer questions about current GOD users, former GOD clients who still need gifts, and waitlist promotions. I only use aggregated, anonymized data — no personal client information is ever sent to the AI.",
+      text: "Сайн байна уу! Би одоогийн GOD хэрэглэгчид, GOD-оос буусан ч бэлэг нь дутуу байгаа харилцагчид, мөн waitlist-ээс GOD болсон өөрчлөлтүүдийн тухай асуултад хариулна. Би зөвхөн нэгтгэсэн (aggregate) мэдээлэл ашиглана — харилцагчийн хувийн мэдээлэл AI руу огт дамжихгүй.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -69,10 +69,10 @@ export default function AIAssistant() {
         }}
       >
         🔒{" "}
-          <span>
-            <strong>Privacy-safe:</strong> The browser sends your question to the
-            app backend, and only aggregated queue totals are forwarded to the AI.
-          </span>
+        <span>
+          <strong>Нууцлал хамгаалсан:</strong> Хөтөч таны асуултыг backend рүү
+          явуулна. Backend нь зөвхөн нэгтгэсэн тоон хураангуйг AI руу дамжуулна.
+        </span>
       </div>
 
       <div
@@ -94,8 +94,8 @@ export default function AIAssistant() {
             alignItems: "center",
             gap: 8,
           }}
-        >
-          🤖 AI Assistant
+          >
+            🤖 AI Assistant
           <span
             style={{
               fontSize: 11,
@@ -104,7 +104,7 @@ export default function AIAssistant() {
               marginLeft: 4,
             }}
           >
-            Aggregated portfolio data only
+            Зөвхөн нэгтгэсэн өгөгдөл
           </span>
         </div>
 
@@ -209,7 +209,7 @@ export default function AIAssistant() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && send()}
-            placeholder="Ask about the GOD queue, downgrades, or waitlist promotions..."
+            placeholder="GOD дараалал, бууралт, waitlist нэмэгдэл талаар асуу..."
             disabled={loading}
             style={{
               flex: 1,
@@ -237,7 +237,7 @@ export default function AIAssistant() {
               opacity: !input.trim() || loading ? 0.5 : 1,
             }}
           >
-            Send
+            Илгээх
           </button>
         </div>
       </div>

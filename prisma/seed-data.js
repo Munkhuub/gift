@@ -44,7 +44,6 @@ function buildClientCreate(client) {
     giftEligibilityStatus: normalized.giftEligibilityStatus,
     giftDate: parseGiftDate(normalized.giftDate),
     hasLoan: normalized.loan,
-    loanOverdueDays: normalized.loanOverdueDays,
     isWaitlist: normalized.isWaitlist,
     tierChangedAt: parseGiftDate(normalized.tierChangedAt),
     statusReason: normalized.statusReason,

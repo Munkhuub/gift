@@ -20,6 +20,9 @@ model Client {
   giftDate              DateTime?
   hasLoan               Boolean                @default(false)
   loanOverdueDays       Int                    @default(0)
+  pickupNotified        Boolean                @default(false)
+  pickupCenter          String                 @default("Мөнгөн Завьяа зээлийн төв")
+  pickupNotifiedAt      DateTime?
   isWaitlist            Boolean                @default(false)
   tierChangedAt         DateTime?
   statusReason          String                 @default("")

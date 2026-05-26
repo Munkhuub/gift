@@ -1,5 +1,5 @@
-import { startTransition, useDeferredValue, useEffect, useState } from "react";
-import { fetchClients } from "../lib/api";
+import { startTransition, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { fetchClients, updateClient } from "../lib/api";
 
 const tierColors = {
   GOD: { bg: "#FFF8ED", text: "#92400E", border: "#FCD34D" },
@@ -10,66 +10,54 @@ const tierColors = {
   SILVER: { bg: "#F8FAFC", text: "#475569", border: "#CBD5E1" },
 };
 
-// Smart filter definitions — each has a label and a function that tests a client row
+// Ухаалаг шүүлтүүрүүд — харилцагчийн мөрийг шалгах дүрмүүд
 const SMART_FILTERS = [
   {
     key: "AT_RISK",
-    label: "⚠️ Gift at Risk",
+    label: "⚠️ Бэлэг эрсдэлтэй",
     color: {
       bg: "#FEF2F2",
       text: "#B91C1C",
       border: "#FECACA",
       active: "#B91C1C",
     },
-    tooltip: "Was GOD tier — gift not yet delivered — now downgraded",
+    tooltip: "Өмнө нь GOD байсан, бэлэг хүргэгдээгүй, одоо буурсан",
     test: (c) => c.previousTier === "GOD" && c.tier !== "GOD" && !c.giftDone,
   },
   {
     key: "WAITLIST",
-    label: "🆕 Waitlist GOD",
+    label: "🆕 Waitlist-ээс GOD",
     color: {
       bg: "#F0FDF4",
       text: "#15803D",
       border: "#BBF7D0",
       active: "#15803D",
     },
-    tooltip: "Newly promoted GOD from waitlist — gift not yet assigned",
+    tooltip: "Waitlist-ээс шинээр GOD болсон, бэлэг хараахан олгоогүй",
     test: (c) => c.isWaitlist && c.tier === "GOD" && !c.giftDone,
   },
   {
-    key: "OVERDUE",
-    label: "🔴 Overdue 5d+",
-    color: {
-      bg: "#FFF7ED",
-      text: "#C2410C",
-      border: "#FED7AA",
-      active: "#C2410C",
-    },
-    tooltip: "Loan overdue 5 or more days — tier change risk",
-    test: (c) => (c.loanOverdueDays || 0) >= 5,
-  },
-  {
     key: "PENDING",
-    label: "⏳ Pending Gift",
+    label: "⏳ Хүргэгдээгүй",
     color: {
       bg: "#F8FAFC",
       text: "#475569",
       border: "#CBD5E1",
       active: "#475569",
     },
-    tooltip: "Gift not yet delivered",
+    tooltip: "Бэлэг хараахан хүргэгдээгүй",
     test: (c) => !c.giftDone,
   },
   {
     key: "DELIVERED",
-    label: "✓ Delivered",
+    label: "✓ Хүргэгдсэн",
     color: {
       bg: "#F0FDF4",
       text: "#15803D",
       border: "#BBF7D0",
       active: "#15803D",
     },
-    tooltip: "Gift delivered",
+    tooltip: "Бэлэг хүргэгдсэн",
     test: (c) => c.giftDone,
   },
 ];
@@ -117,10 +105,16 @@ export default function Clients({ initialClients }) {
   const [clients, setClients] = useState(initialClients);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [updatingId, setUpdatingId] = useState(null);
+  const [editingPickupId, setEditingPickupId] = useState(null);
+  const [pickupDraft, setPickupDraft] = useState({
+    pickupNotified: false,
+    pickupCenter: "Мөнгөн Завьяа зээлийн төв",
+    pickupNotifiedAt: "",
+  });
   const [search, setSearch] = useState("");
   const [giftDate, setGiftDate] = useState("");
-  const [smartFilter, setSmartFilter] = useState(null); // key of SMART_FILTERS or null
-  const [overdueDays, setOverdueDays] = useState(""); // free input for overdue threshold
+  const [smartFilter, setSmartFilter] = useState(null); // SMART_FILTERS-ийн түлхүүр эсвэл null
   const deferredSearch = useDeferredValue(search.trim());
 
   // ─── Sync when initialClients changes (API refresh) ───────────────────────
@@ -146,7 +140,7 @@ export default function Clients({ initialClients }) {
         if (!active) return;
         startTransition(() => setClients(result));
       } catch (e) {
-        if (active) setError(e.message || "Could not load clients.");
+        if (active) setError(e.message || "Үйлчлүүлэгчдийг ачаалж чадсангүй.");
       } finally {
         if (active) setLoading(false);
       }
@@ -163,17 +157,58 @@ export default function Clients({ initialClients }) {
 
   const filtered = clients.filter((c) => {
     if (activeSmartDef && !activeSmartDef.test(c)) return false;
-    if (overdueDays && (c.loanOverdueDays || 0) < Number(overdueDays))
-      return false;
     return true;
   });
 
   // ─── Stats (always from full clients list, not filtered) ──────────────────
-  const atRiskCount = clients.filter(SMART_FILTERS[0].test).length;
-  const waitlistCount = clients.filter(SMART_FILTERS[1].test).length;
-  const overdueCount = clients.filter(SMART_FILTERS[2].test).length;
+  const atRiskDef = SMART_FILTERS.find((f) => f.key === "AT_RISK");
+  const waitlistDef = SMART_FILTERS.find((f) => f.key === "WAITLIST");
+  const atRiskCount = atRiskDef ? clients.filter(atRiskDef.test).length : 0;
+  const waitlistCount = waitlistDef ? clients.filter(waitlistDef.test).length : 0;
   const deliveredCount = clients.filter((c) => c.giftDone).length;
-  const hasFilters = smartFilter || deferredSearch || giftDate || overdueDays;
+  const hasFilters = smartFilter || deferredSearch || giftDate;
+
+  const editingClient = useMemo(
+    () =>
+      editingPickupId
+        ? clients.find((c) => String(c.id) === String(editingPickupId)) || null
+        : null,
+    [clients, editingPickupId],
+  );
+
+  const openPickupEditor = (client) => {
+    setEditingPickupId(client.id);
+    setPickupDraft({
+      pickupNotified: Boolean(client.pickupNotified),
+      pickupCenter: client.pickupCenter || "Мөнгөн Завьяа зээлийн төв",
+      pickupNotifiedAt: client.pickupNotifiedAt || "",
+    });
+  };
+
+  const closePickupEditor = () => {
+    setEditingPickupId(null);
+  };
+
+  const savePickupEditor = async () => {
+    if (!editingClient) return;
+    try {
+      setUpdatingId(editingClient.id);
+      setError("");
+      const updated = await updateClient(editingClient.id, {
+        pickupNotified: Boolean(pickupDraft.pickupNotified),
+        pickupCenter: pickupDraft.pickupCenter,
+        pickupNotifiedAt: pickupDraft.pickupNotifiedAt || "",
+      });
+      setClients((current) =>
+        current.map((c) => (c.id === updated.id ? updated : c)),
+      );
+      closePickupEditor();
+    } catch (e) {
+      setError(e.message || "Төлөв шинэчилж чадсангүй.");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
 
   return (
     <div>
@@ -199,8 +234,8 @@ export default function Clients({ initialClients }) {
             <strong>
               {atRiskCount} client{atRiskCount > 1 ? "s" : ""}
             </strong>{" "}
-            were GOD tier but got downgraded — gift not yet delivered. Act
-            before they leave the portfolio.
+            өмнө нь GOD байсан ч буурсан байна — бэлэг хүргэгдээгүй. Портфелиос
+            гарахаас нь өмнө шийдвэрлээрэй.
           </span>
           <button
             onClick={() => setSmartFilter("AT_RISK")}
@@ -216,7 +251,7 @@ export default function Clients({ initialClients }) {
               whiteSpace: "nowrap",
             }}
           >
-            View them →
+            Харах →
           </button>
         </div>
       )}
@@ -243,7 +278,7 @@ export default function Clients({ initialClients }) {
             <strong>
               {waitlistCount} new GOD client{waitlistCount > 1 ? "s" : ""}
             </strong>{" "}
-            promoted from waitlist — gifts not yet assigned.
+            waitlist-ээс GOD болсон — бэлэг хараахан олгоогүй.
           </span>
           <button
             onClick={() => setSmartFilter("WAITLIST")}
@@ -259,7 +294,7 @@ export default function Clients({ initialClients }) {
               whiteSpace: "nowrap",
             }}
           >
-            View them →
+            Харах →
           </button>
         </div>
       )}
@@ -269,21 +304,20 @@ export default function Clients({ initialClients }) {
         style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}
       >
         <StatCard
-          label="Total clients"
+          label="Нийт"
           value={clients.length}
           color="#1E293B"
         />
         <StatCard
-          label="Gifts delivered"
+          label="Хүргэгдсэн"
           value={deliveredCount}
           color="#15803D"
         />
-        <StatCard label="Gift at risk" value={atRiskCount} color="#B91C1C" />
-        <StatCard label="Waitlist GODs" value={waitlistCount} color="#0369A1" />
-        <StatCard label="Overdue 5d+" value={overdueCount} color="#C2410C" />
+        <StatCard label="Эрсдэлтэй" value={atRiskCount} color="#B91C1C" />
+        <StatCard label="Waitlist GOD" value={waitlistCount} color="#0369A1" />
       </div>
 
-      {/* ── Smart Filter Chips ── */}
+      {/* ── Ухаалаг шүүлтүүр ── */}
       <div
         style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}
       >
@@ -329,14 +363,14 @@ export default function Clients({ initialClients }) {
         })}
       </div>
 
-      {/* ── Search / Date / Overdue Inputs ── */}
+      {/* ── Хайлт / Огноо ── */}
       <div
         style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}
       >
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name..."
+          placeholder="Нэрээр хайх..."
           style={{
             flex: 2,
             minWidth: 160,
@@ -361,28 +395,11 @@ export default function Clients({ initialClients }) {
             color: "#1E293B",
           }}
         />
-        <input
-          type="number"
-          value={overdueDays}
-          onChange={(e) => setOverdueDays(e.target.value)}
-          placeholder="Overdue ≥ days"
-          min={0}
-          style={{
-            width: 130,
-            fontSize: 13,
-            padding: "8px 12px",
-            border: "1px solid #E2E8F0",
-            borderRadius: 8,
-            background: "#fff",
-            color: "#1E293B",
-          }}
-        />
         <button
           onClick={() => {
             setSearch("");
             setSmartFilter(null);
             setGiftDate("");
-            setOverdueDays("");
           }}
           disabled={!hasFilters}
           style={{
@@ -397,13 +414,13 @@ export default function Clients({ initialClients }) {
             opacity: hasFilters ? 1 : 0.5,
           }}
         >
-          Clear all
+          Бүгдийг цэвэрлэх
         </button>
       </div>
 
       {loading && (
         <div style={{ marginBottom: 12, fontSize: 12, color: "#64748B" }}>
-          Loading clients...
+          Ачаалж байна...
         </div>
       )}
       {error && (
@@ -430,15 +447,14 @@ export default function Clients({ initialClients }) {
           <tr style={{ borderBottom: "2px solid #E2E8F0" }}>
             {[
               "#",
-              "Last name",
-              "First name",
-              "Phone",
-              "Tier",
-              "Previous tier",
-              "Overdue days",
-              "Gift status",
-              "Gift date",
-              "Loan",
+              "Овог",
+              "Нэр",
+              "Утас",
+              "Түвшин",
+              "Бэлгийн төлөв",
+              "Огноо",
+              "📞 Мэдэгдсэн",
+              "Зээлийн гэрээ",
             ].map((h) => (
               <th
                 key={h}
@@ -506,44 +522,6 @@ export default function Clients({ initialClients }) {
                   )}
                 </td>
 
-                {/* Previous tier — key column for downgrade tracking */}
-                <td style={{ padding: "11px 10px" }}>
-                  {c.previousTier && c.previousTier !== c.tier ? (
-                    <span
-                      style={{ display: "flex", alignItems: "center", gap: 4 }}
-                    >
-                      <TierBadge tier={c.previousTier} />
-                      <span style={{ fontSize: 10, color: "#94A3B8" }}>
-                        → {c.tier}
-                      </span>
-                    </span>
-                  ) : (
-                    <span style={{ color: "#CBD5E1", fontSize: 12 }}>—</span>
-                  )}
-                </td>
-
-                {/* Overdue days */}
-                <td style={{ padding: "11px 10px" }}>
-                  {c.loanOverdueDays > 0 ? (
-                    <span
-                      style={{
-                        background:
-                          c.loanOverdueDays >= 5 ? "#FEF2F2" : "#FFF7ED",
-                        color: c.loanOverdueDays >= 5 ? "#B91C1C" : "#C2410C",
-                        border: `1px solid ${c.loanOverdueDays >= 5 ? "#FECACA" : "#FED7AA"}`,
-                        borderRadius: 99,
-                        padding: "3px 10px",
-                        fontSize: 11,
-                        fontWeight: 600,
-                      }}
-                    >
-                      {c.loanOverdueDays}d
-                    </span>
-                  ) : (
-                    <span style={{ color: "#94A3B8", fontSize: 12 }}>—</span>
-                  )}
-                </td>
-
                 {/* Gift status */}
                 <td style={{ padding: "11px 10px" }}>
                   {c.giftDone ? (
@@ -558,7 +536,7 @@ export default function Clients({ initialClients }) {
                         border: "1px solid #BBF7D0",
                       }}
                     >
-                      ✓ Delivered
+                      ✓ Хүргэгдсэн
                     </span>
                   ) : wasGodDowngraded ? (
                     <span
@@ -572,7 +550,7 @@ export default function Clients({ initialClients }) {
                         border: "1px solid #FECACA",
                       }}
                     >
-                      ⚠️ At risk
+                      ⚠️ Эрсдэлтэй
                     </span>
                   ) : (
                     <span
@@ -586,7 +564,7 @@ export default function Clients({ initialClients }) {
                         border: "1px solid #FDE68A",
                       }}
                     >
-                      ⏳ Pending
+                      ⏳ Хүлээгдэж буй
                     </span>
                   )}
                 </td>
@@ -600,6 +578,37 @@ export default function Clients({ initialClients }) {
                 >
                   {c.giftDate || "—"}
                 </td>
+
+                {/* Pickup notified */}
+                <td style={{ padding: "11px 10px" }}>
+                  <button
+                    onClick={() => openPickupEditor(c)}
+                    disabled={updatingId === c.id}
+                    title="Утсаар мэдэгдсэн эсэх (Мөнгөн Завьяа зээлийн төвөөс авах)"
+                    style={{
+                      fontSize: 11,
+                      padding: "4px 10px",
+                      borderRadius: 99,
+                      border: `1px solid ${
+                        c.pickupNotified ? "#BBF7D0" : "#E2E8F0"
+                      }`,
+                      background: c.pickupNotified ? "#F0FDF4" : "#fff",
+                      color: c.pickupNotified ? "#15803D" : "#64748B",
+                      cursor: updatingId === c.id ? "not-allowed" : "pointer",
+                      fontWeight: 600,
+                      opacity: updatingId === c.id ? 0.6 : 1,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {c.pickupNotified ? "📞 Тийм" : "Засах…"}
+                  </button>
+                  {c.pickupNotifiedAt ? (
+                    <div style={{ marginTop: 4, fontSize: 10, color: "#94A3B8" }}>
+                      {c.pickupNotifiedAt}
+                    </div>
+                  ) : null}
+                </td>
+
                 <td style={{ padding: "11px 10px" }}>
                   {c.loan ? (
                     <span
@@ -613,7 +622,7 @@ export default function Clients({ initialClients }) {
                         border: "1px solid #BFDBFE",
                       }}
                     >
-                      ✓ Yes
+                      ✓ Тийм
                     </span>
                   ) : (
                     <span style={{ color: "#94A3B8", fontSize: 12 }}>—</span>
@@ -634,13 +643,172 @@ export default function Clients({ initialClients }) {
             fontSize: 13,
           }}
         >
-          No clients matched the current filters.
+          Одоогийн шүүлтүүрт тохирох харилцагч олдсонгүй.
         </div>
       )}
 
       <div style={{ marginTop: 12, fontSize: 11, color: "#94A3B8" }}>
-        Showing {filtered.length} of {clients.length} clients
+        {clients.length}-с {filtered.length} харуулж байна
       </div>
+
+      {/* Inline editor modal */}
+      {editingClient && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closePickupEditor();
+          }}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.35)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            zIndex: 50,
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 520,
+              background: "#fff",
+              borderRadius: 14,
+              border: "1px solid #E2E8F0",
+              boxShadow: "0 18px 50px rgba(15, 23, 42, 0.25)",
+              padding: 18,
+            }}
+          >
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#1E293B" }}>
+              📞 “Мэдэгдсэн” засах
+            </div>
+            <div style={{ marginTop: 6, fontSize: 12, color: "#64748B" }}>
+              {editingClient.last} {editingClient.first} ({editingClient.phone})
+            </div>
+
+            <div style={{ marginTop: 14 }}>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  fontSize: 13,
+                  color: "#1E293B",
+                  cursor: "pointer",
+                  userSelect: "none",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={pickupDraft.pickupNotified}
+                  onChange={(e) =>
+                    setPickupDraft((d) => ({
+                      ...d,
+                      pickupNotified: e.target.checked,
+                      pickupNotifiedAt: e.target.checked
+                        ? d.pickupNotifiedAt || new Date().toISOString().slice(0, 10)
+                        : "",
+                    }))
+                  }
+                />
+                Утсаар мэдэгдсэн
+              </label>
+            </div>
+
+            <div
+              style={{
+                marginTop: 12,
+                display: "grid",
+                gridTemplateColumns: "1fr 160px",
+                gap: 10,
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 12, color: "#64748B", marginBottom: 6 }}>
+                  Очих төв
+                </div>
+                <input
+                  value={pickupDraft.pickupCenter}
+                  onChange={(e) =>
+                    setPickupDraft((d) => ({ ...d, pickupCenter: e.target.value }))
+                  }
+                  placeholder="Мөнгөн Завьяа зээлийн төв"
+                  style={{
+                    width: "100%",
+                    fontSize: 13,
+                    padding: "8px 12px",
+                    border: "1px solid #E2E8F0",
+                    borderRadius: 10,
+                    background: "#fff",
+                    color: "#1E293B",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: "#64748B", marginBottom: 6 }}>
+                  Огноо
+                </div>
+                <input
+                  type="date"
+                  value={pickupDraft.pickupNotifiedAt || ""}
+                  onChange={(e) =>
+                    setPickupDraft((d) => ({ ...d, pickupNotifiedAt: e.target.value }))
+                  }
+                  disabled={!pickupDraft.pickupNotified}
+                  style={{
+                    width: "100%",
+                    fontSize: 13,
+                    padding: "8px 12px",
+                    border: "1px solid #E2E8F0",
+                    borderRadius: 10,
+                    background: pickupDraft.pickupNotified ? "#fff" : "#F8FAFC",
+                    color: "#1E293B",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+            </div>
+
+            <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button
+                onClick={closePickupEditor}
+                style={{
+                  fontSize: 12,
+                  padding: "8px 12px",
+                  borderRadius: 10,
+                  border: "1px solid #E2E8F0",
+                  background: "#fff",
+                  color: "#64748B",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                Болих
+              </button>
+              <button
+                onClick={savePickupEditor}
+                disabled={updatingId === editingClient.id}
+                style={{
+                  fontSize: 12,
+                  padding: "8px 12px",
+                  borderRadius: 10,
+                  border: "none",
+                  background: "#1E293B",
+                  color: "#fff",
+                  cursor: updatingId === editingClient.id ? "not-allowed" : "pointer",
+                  fontWeight: 700,
+                  opacity: updatingId === editingClient.id ? 0.7 : 1,
+                }}
+              >
+                Хадгалах
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

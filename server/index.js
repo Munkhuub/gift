@@ -14,6 +14,7 @@ import {
   getMarketingResourceIssuesPayload,
   getMarketingResourcesPayload,
   logGiftPayload,
+  updateClientPayload,
   updateMarketingResourcePayload,
 } from "./api-core.js";
 import { ensureClientStore } from "./store.js";
@@ -51,6 +52,11 @@ function createApp() {
 
   app.patch("/api/clients/:id/deliver", async (req, res) => {
     const result = await deliverClientPayload(req.params.id);
+    res.status(result.status).json(result.body);
+  });
+
+  app.patch("/api/clients/:id", async (req, res) => {
+    const result = await updateClientPayload(req.params.id, req.body);
     res.status(result.status).json(result.body);
   });
 

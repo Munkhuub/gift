@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { MERCH_CATEGORIES } from "../data/marketingResources.js";
 
 const categoryLabels = {
-  PEN: "Pen",
-  NOTEBOOK: "Notebook",
-  STICKER: "Sticker",
-  STUFFED_TOY: "Stuffed Toy",
-  GIFT_SET: "Gift Set",
-  OTHER: "Other",
+  PEN: "Үзэг",
+  NOTEBOOK: "Дэвтэр",
+  STICKER: "Наалт",
+  STUFFED_TOY: "Чихмэл тоглоом",
+  GIFT_SET: "Бэлгийн багц",
+  OTHER: "Бусад",
 };
 
 export default function MarketingResources({
@@ -134,7 +134,7 @@ export default function MarketingResources({
     setSavingItem(false);
 
     if (!created) {
-      setItemError("Could not save this merch item.");
+      setItemError("Мерчийн мэдээллийг хадгалж чадсангүй.");
       return;
     }
 
@@ -146,7 +146,7 @@ export default function MarketingResources({
       storageLocation: "",
       note: "",
     });
-    setItemSuccess("Merch item added to inventory.");
+    setItemSuccess("Мерч агуулахад нэмэгдлээ.");
   };
 
   const handleIssueItem = async () => {
@@ -163,7 +163,7 @@ export default function MarketingResources({
     setSavingIssue(false);
 
     if (!result) {
-      setIssueError("Could not record this merch issue.");
+      setIssueError("Мерч гаргалтыг бүртгэж чадсангүй.");
       return;
     }
 
@@ -176,12 +176,12 @@ export default function MarketingResources({
       issuedAt: new Date().toISOString().split("T")[0],
       note: "",
     });
-    setIssueSuccess("Merch issue recorded.");
+    setIssueSuccess("Мерч гаргалт бүртгэгдлээ.");
   };
 
   const handleRestock = async (item) => {
     const amountText = window.prompt(
-      `Add stock for ${item.name}. How many ${item.unit} arrived?`,
+      `${item.name} дээр нэмэлт орлого бүртгэх. Хэдэн ${item.unit} нэмэгдэх вэ?`,
       "10",
     );
 
@@ -213,9 +213,9 @@ export default function MarketingResources({
           lineHeight: 1.6,
         }}
       >
-        Marketing merch tracker for physical giveaway items like pens,
-        notebooks, stickers, stuffed toys, and gift sets. Track what is in
-        stock, what went out, who received it, and why it was issued.
+        Маркетингийн мерч хяналт: үзэг, дэвтэр, наалт, чихмэл тоглоом, бэлгийн
+        багц зэрэг бэлэглэлийн зүйлсийн үлдэгдэл, гаргалт, хэнд/юунд зориулж
+        гаргасныг хянах зориулалттай.
       </div>
 
       <div
@@ -227,11 +227,11 @@ export default function MarketingResources({
         }}
       >
         {[
-          { label: "Merch types", value: summary.totalItems, color: "#1E293B" },
-          { label: "Total stock", value: summary.totalStock, color: "#1D4ED8" },
-          { label: "Went out", value: summary.totalIssued, color: "#D97706" },
+          { label: "Мерч төрөл", value: summary.totalItems, color: "#1E293B" },
+          { label: "Нийт үлдэгдэл", value: summary.totalStock, color: "#1D4ED8" },
+          { label: "Гарсан", value: summary.totalIssued, color: "#D97706" },
           {
-            label: "Remaining on hand",
+            label: "Одоогийн үлдэгдэл",
             value: summary.totalRemaining,
             color: "#15803D",
           },
@@ -273,7 +273,7 @@ export default function MarketingResources({
         }}
       >
         <div style={panelStyle}>
-          <div style={panelTitleStyle}>Add merch stock item</div>
+          <div style={panelTitleStyle}>Мерч нэмэх</div>
 
           <div style={twoColumnStyle}>
             <input
@@ -301,13 +301,13 @@ export default function MarketingResources({
               min="0"
               value={itemForm.totalStock}
               onChange={(event) => setItemField("totalStock", event.target.value)}
-              placeholder="Starting stock"
+              placeholder="Эхний үлдэгдэл"
               style={inputStyle}
             />
             <input
               value={itemForm.unit}
               onChange={(event) => setItemField("unit", event.target.value)}
-              placeholder="Unit"
+              placeholder="Хэмжих нэгж"
               style={inputStyle}
             />
             <input
@@ -315,7 +315,7 @@ export default function MarketingResources({
               onChange={(event) =>
                 setItemField("storageLocation", event.target.value)
               }
-              placeholder="Storage location"
+              placeholder="Байршил (агуулах/шүүгээ)"
               style={inputStyle}
             />
           </div>
@@ -323,7 +323,7 @@ export default function MarketingResources({
           <textarea
             value={itemForm.note}
             onChange={(event) => setItemField("note", event.target.value)}
-            placeholder="Optional note"
+            placeholder="Тэмдэглэл (заавал биш)"
             style={{ ...inputStyle, minHeight: 84, resize: "vertical" }}
           />
 
@@ -332,7 +332,7 @@ export default function MarketingResources({
             onClick={handleCreateItem}
             style={primaryButtonStyle}
           >
-            {savingItem ? "Saving..." : "Save merch item"}
+            {savingItem ? "Хадгалж байна..." : "Хадгалах"}
           </button>
 
           {itemError && <div style={errorStyle}>{itemError}</div>}
@@ -340,7 +340,7 @@ export default function MarketingResources({
         </div>
 
         <div style={panelStyle}>
-          <div style={panelTitleStyle}>Record merch going out</div>
+          <div style={panelTitleStyle}>Мерч гаргалт бүртгэх</div>
 
           <div style={twoColumnStyle}>
             <select
@@ -362,7 +362,7 @@ export default function MarketingResources({
               min="1"
               value={issueForm.quantity}
               onChange={(event) => setIssueField("quantity", event.target.value)}
-              placeholder="Quantity out"
+              placeholder="Гаргах тоо"
               style={inputStyle}
             />
           </div>
@@ -373,13 +373,13 @@ export default function MarketingResources({
               onChange={(event) =>
                 setIssueField("recipientName", event.target.value)
               }
-              placeholder="Who got it"
+              placeholder="Хэнд өгсөн"
               style={inputStyle}
             />
             <input
               value={issueForm.purpose}
               onChange={(event) => setIssueField("purpose", event.target.value)}
-              placeholder="Purpose"
+              placeholder="Зориулалт"
               style={inputStyle}
             />
           </div>
@@ -388,7 +388,7 @@ export default function MarketingResources({
             <input
               value={issueForm.issuedBy}
               onChange={(event) => setIssueField("issuedBy", event.target.value)}
-              placeholder="Issued by"
+              placeholder="Гаргасан хүн"
               style={inputStyle}
             />
             <input
@@ -402,7 +402,7 @@ export default function MarketingResources({
           <textarea
             value={issueForm.note}
             onChange={(event) => setIssueField("note", event.target.value)}
-            placeholder="Optional issue note"
+            placeholder="Тэмдэглэл (заавал биш)"
             style={{ ...inputStyle, minHeight: 84, resize: "vertical" }}
           />
 
@@ -418,7 +418,7 @@ export default function MarketingResources({
                 color: "#1D4ED8",
               }}
             >
-              Remaining before issue:{" "}
+              Гаргалтаас өмнөх үлдэгдэл:{" "}
               <strong>
                 {pendingIssueItem.remainingStock} {pendingIssueItem.unit}
               </strong>
@@ -430,7 +430,7 @@ export default function MarketingResources({
             onClick={handleIssueItem}
             style={primaryButtonStyle}
           >
-            {savingIssue ? "Saving..." : "Record merch out"}
+            {savingIssue ? "Хадгалж байна..." : "Гаргалт бүртгэх"}
           </button>
 
           {issueError && <div style={errorStyle}>{issueError}</div>}
@@ -447,9 +447,9 @@ export default function MarketingResources({
       >
         <div style={panelStyle}>
           <div style={panelHeaderRowStyle}>
-            <div style={panelTitleStyle}>Merch inventory</div>
+            <div style={panelTitleStyle}>Мерч үлдэгдэл</div>
             <span style={{ fontSize: 12, color: "#64748B" }}>
-              {summary.lowStock} low-stock item{summary.lowStock === 1 ? "" : "s"}
+              {summary.lowStock} дуусах дөхсөн төрөл
             </span>
           </div>
 
@@ -465,7 +465,7 @@ export default function MarketingResources({
               onChange={(event) => setCategoryFilter(event.target.value)}
               style={{ ...inputStyle, width: 180 }}
             >
-              <option value="ALL">All categories</option>
+              <option value="ALL">Бүх төрөл</option>
               {MERCH_CATEGORIES.map((category) => (
                 <option key={category} value={category}>
                   {categoryLabels[category]}
@@ -478,7 +478,7 @@ export default function MarketingResources({
             <table style={tableStyle}>
               <thead>
                 <tr style={tableHeadRowStyle}>
-                  {["Item", "Category", "In stock", "Went out", "Left", "Action"].map(
+                  {["Нэр", "Төрөл", "Нийт", "Гарсан", "Үлдсэн", "Үйлдэл"].map(
                     (header) => (
                       <th key={header} style={tableHeadCellStyle}>
                         {header}
@@ -496,6 +496,7 @@ export default function MarketingResources({
                       </div>
                       <div style={{ fontSize: 12, color: "#64748B" }}>
                         {item.storageLocation || "No location"}
+                        {item.storageLocation || "Байршилгүй"}
                       </div>
                     </td>
                     <td style={tableCellStyle}>{categoryLabels[item.category]}</td>
@@ -520,7 +521,7 @@ export default function MarketingResources({
                         onClick={() => handleRestock(item)}
                         style={secondaryButtonStyle}
                       >
-                        Restock
+                        Нэмэлт орлого
                       </button>
                     </td>
                   </tr>
@@ -552,6 +553,7 @@ export default function MarketingResources({
             {filteredIssues.length === 0 ? (
               <div style={{ padding: 18, fontSize: 13, color: "#94A3B8" }}>
                 No merch issue history matched that day.
+                Сонгосон өдрөөр мерч гаргалтын түүх олдсонгүй.
               </div>
             ) : (
               filteredIssues.map((issue, index) => (
@@ -581,17 +583,17 @@ export default function MarketingResources({
                     {issue.quantity} {issue.quantity === 1 ? "item" : "items"} went to{" "}
                     <strong>{issue.recipientName}</strong>
                     <br />
-                    Purpose: {issue.purpose}
+                    Зориулалт: {issue.purpose}
                     {issue.issuedBy ? (
                       <>
                         <br />
-                        Issued by: {issue.issuedBy}
+                        Гаргасан хүн: {issue.issuedBy}
                       </>
                     ) : null}
                     {issue.note ? (
                       <>
                         <br />
-                        Note: {issue.note}
+                        Тэмдэглэл: {issue.note}
                       </>
                     ) : null}
                   </div>

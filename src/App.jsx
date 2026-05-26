@@ -12,20 +12,20 @@ import {
   fetchMarketingResources,
   issueMarketingResource,
   logGiftDelivery,
-  markClientDelivered,
   updateMarketingResource,
 } from "./lib/api";
 
 const TABS = [
-  { id: 'dashboard', label: '📊 Dashboard' },
-  { id: 'clients', label: '👑 Gift Queue' },
-  { id: 'log', label: '✏️ Log Gift' },
-  { id: 'marketing', label: '🎒 Merch Tracker' },
-  { id: 'ai', label: '🤖 AI Assistant' },
+  { id: "dashboard", label: "Хяналтын самбар" },
+  { id: "clients", label: "God Бэлэг" },
+  { id: "log", label: "Хүргэлт бүртгэх" },
+  { id: "marketing", label: "Мерч хяналт" },
+  { id: "ai", label: "AI туслах" },
 ];
 
 export default function App() {
-  const [tab, setTab] = useState('dashboard');
+  const [tab, setTab] = useState("dashboard");
+  const [logClientId, setLogClientId] = useState("");
   const [clients, setClients] = useState([]);
   const [history, setHistory] = useState([]);
   const [marketingResources, setMarketingResources] = useState([]);
@@ -58,8 +58,7 @@ export default function App() {
         historyResult,
         marketingResourcesResult,
         marketingIssuesResult,
-      ] =
-        await Promise.allSettled([
+      ] = await Promise.allSettled([
         fetchClients(),
         fetchGiftHistory({ limit: 8 }),
         fetchMarketingResources(),
@@ -94,31 +93,31 @@ export default function App() {
 
       if (clientsResult.status === "rejected") {
         errors.push(
-          `Clients API: ${clientsResult.reason?.message || "Could not load clients."}`,
+          `Үйлчлүүлэгчийн API: ${clientsResult.reason?.message || "Үйлчлүүлэгчдийг ачаалж чадсангүй."}`,
         );
       }
 
       if (historyResult.status === "rejected") {
         errors.push(
-          `History API: ${historyResult.reason?.message || "Could not load history."}`,
+          `Түүхийн API: ${historyResult.reason?.message || "Түүхийг ачаалж чадсангүй."}`,
         );
       }
 
       if (marketingResourcesResult.status === "rejected") {
         errors.push(
-          `Marketing API: ${marketingResourcesResult.reason?.message || "Could not load marketing resources."}`,
+          `Маркетингийн API: ${marketingResourcesResult.reason?.message || "Мерч мэдээллийг ачаалж чадсангүй."}`,
         );
       }
 
       if (marketingIssuesResult.status === "rejected") {
         errors.push(
-          `Marketing issue API: ${marketingIssuesResult.reason?.message || "Could not load marketing issues."}`,
+          `Мерч гаралт API: ${marketingIssuesResult.reason?.message || "Мерч гаралтын түүхийг ачаалж чадсангүй."}`,
         );
       }
 
       setError(errors.join(" "));
     } catch (err) {
-      setError(err.message || "Could not load app data.");
+      setError(err.message || "Аппын мэдээллийг ачаалж чадсангүй.");
     } finally {
       setLoading(false);
     }
@@ -128,23 +127,9 @@ export default function App() {
     loadData();
   }, []);
 
-  const markDelivered = async (id) => {
-    try {
-      setError("");
-      const updated = await markClientDelivered(id);
-      setClients((current) =>
-        current.map((client) => (client.id === updated.id ? updated : client)),
-      );
-      try {
-        await loadGiftHistory();
-      } catch (historyError) {
-        setError(historyError.message || "Could not refresh gift history.");
-      }
-      return true;
-    } catch (err) {
-      setError(err.message || "Could not update delivery status.");
-      return false;
-    }
+  const openLogGiftForClient = (id) => {
+    setLogClientId(String(id));
+    setTab("log");
   };
 
   const logGift = async (payload) => {
@@ -155,13 +140,19 @@ export default function App() {
         current.map((client) => (client.id === updated.id ? updated : client)),
       );
       try {
-        await loadGiftHistory();
+        await Promise.all([
+          loadGiftHistory(),
+          loadMarketingResources(),
+          loadMarketingIssues(),
+        ]);
       } catch (historyError) {
-        setError(historyError.message || "Could not refresh gift history.");
+        setError(
+          historyError.message || "Бэлэг, түүх, мерчийн мэдээллийг шинэчилж чадсангүй.",
+        );
       }
       return true;
     } catch (err) {
-      setError(err.message || "Could not save the gift record.");
+      setError(err.message || "Бэлгийн бүртгэлийг хадгалж чадсангүй.");
       return false;
     }
   };
@@ -174,12 +165,12 @@ export default function App() {
         await loadMarketingResources();
       } catch (marketingError) {
         setError(
-          marketingError.message || "Could not refresh marketing resources.",
+          marketingError.message || "Мерч мэдээллийг шинэчилж чадсангүй.",
         );
       }
       return created;
     } catch (err) {
-      setError(err.message || "Could not save the marketing resource.");
+      setError(err.message || "Мерчийг хадгалж чадсангүй.");
       return null;
     }
   };
@@ -192,12 +183,13 @@ export default function App() {
         await Promise.all([loadMarketingResources(), loadMarketingIssues()]);
       } catch (marketingError) {
         setError(
-          marketingError.message || "Could not refresh merch tracker data.",
+          marketingError.message ||
+            "Мерч хяналтын мэдээллийг шинэчилж чадсангүй.",
         );
       }
       return result;
     } catch (err) {
-      setError(err.message || "Could not record merch issue.");
+      setError(err.message || "Мерч гаргалтыг бүртгэж чадсангүй.");
       return null;
     }
   };
@@ -207,11 +199,13 @@ export default function App() {
       setError("");
       const updated = await updateMarketingResource(id, updates);
       setMarketingResources((current) =>
-        current.map((resource) => (resource.id === updated.id ? updated : resource)),
+        current.map((resource) =>
+          resource.id === updated.id ? updated : resource,
+        ),
       );
       return updated;
     } catch (err) {
-      setError(err.message || "Could not update the marketing resource.");
+      setError(err.message || "Мерчийн мэдээллийг шинэчилж чадсангүй.");
       return null;
     }
   };
@@ -221,58 +215,179 @@ export default function App() {
   ).length;
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F8FAFC', fontFamily: "'DM Sans', 'Segoe UI', sans-serif" }}>
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "#F8FAFC",
+        fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
+      }}
+    >
+      <link
+        href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap"
+        rel="stylesheet"
+      />
 
-      <div style={{ background: '#fff', borderBottom: '1px solid #E2E8F0', padding: '0 32px' }}>
-        <div style={{ maxWidth: 960, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div
+        style={{
+          background: "#fff",
+          borderBottom: "1px solid #E2E8F0",
+          padding: "0 32px",
+        }}
+      >
+        <div
+          style={{
+            margin: "0 auto",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            height: 56,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 20 }}>🎁</span>
-            <span style={{ fontSize: 15, fontWeight: 600, color: '#1E293B' }}>Gift Intelligence Hub</span>
-            <span style={{ fontSize: 11, background: '#F0F4FF', color: '#1E3A8A', border: '1px solid #BFDBFE', borderRadius: 99, padding: '2px 8px', fontWeight: 500 }}>Pocket AI Hackathon 2026</span>
-            <span style={{ fontSize: 11, background: '#FFF8ED', color: '#92400E', border: '1px solid #FCD34D', borderRadius: 99, padding: '2px 8px', fontWeight: 600 }}>Daily GOD + owed-gift tracker</span>
+            <span style={{ fontSize: 15, fontWeight: 600, color: "#1E293B" }}>
+              Gift Intelligence Hub
+            </span>
+            <span
+              style={{
+                fontSize: 11,
+                background: "#F0F4FF",
+                color: "#1E3A8A",
+                border: "1px solid #BFDBFE",
+                borderRadius: 99,
+                padding: "2px 8px",
+                fontWeight: 500,
+              }}
+            >
+              Pocket AI Hackathon 2026
+            </span>
+            <span
+              style={{
+                fontSize: 11,
+                background: "#FFF8ED",
+                color: "#92400E",
+                border: "1px solid #FCD34D",
+                borderRadius: 99,
+                padding: "2px 8px",
+                fontWeight: 600,
+              }}
+            >
+              Өдөр тутмын GOD + бэлгийн үүрэг
+            </span>
           </div>
           {pending > 0 && (
-            <div style={{ fontSize: 12, background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', borderRadius: 99, padding: '4px 12px', fontWeight: 500 }}>
-              {pending} gift obligation{pending > 1 ? 's' : ''} open
+            <div
+              style={{
+                fontSize: 12,
+                background: "#FEF2F2",
+                color: "#DC2626",
+                border: "1px solid #FECACA",
+                borderRadius: 99,
+                padding: "4px 12px",
+                fontWeight: 500,
+              }}
+            >
+              {pending} нээлттэй бэлгийн үүрэг
             </div>
           )}
         </div>
       </div>
 
-      <div style={{ background: '#fff', borderBottom: '1px solid #E2E8F0', padding: '0 32px' }}>
-        <div style={{ maxWidth: 960, margin: '0 auto', display: 'flex', gap: 4 }}>
-          {TABS.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)} style={{
-              fontSize: 13, padding: '12px 16px', border: 'none', background: 'none', cursor: 'pointer',
-              color: tab === t.id ? '#1E293B' : '#64748B', fontWeight: tab === t.id ? 600 : 400,
-              borderBottom: `2px solid ${tab === t.id ? '#1E293B' : 'transparent'}`,
-              fontFamily: 'inherit', transition: 'all 0.15s'
-            }}>{t.label}</button>
+      <div
+        style={{
+          background: "#fff",
+          borderBottom: "1px solid #E2E8F0",
+          padding: "0 32px",
+        }}
+      >
+        <div style={{ margin: "0 auto", display: "flex", gap: 4 }}>
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              style={{
+                fontSize: 13,
+                padding: "12px 16px",
+                border: "none",
+                background: "none",
+                cursor: "pointer",
+                color: tab === t.id ? "#1E293B" : "#64748B",
+                fontWeight: tab === t.id ? 600 : 400,
+                borderBottom: `2px solid ${tab === t.id ? "#1E293B" : "transparent"}`,
+                fontFamily: "inherit",
+                transition: "all 0.15s",
+              }}
+            >
+              {t.label}
+            </button>
           ))}
         </div>
       </div>
 
-      <div style={{ maxWidth: 960, margin: '0 auto', padding: '28px 32px' }}>
+      <div style={{ margin: "0 auto", padding: "28px 32px" }}>
         {error && (
-          <div style={{ marginBottom: 16, background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#B91C1C' }}>
+          <div
+            style={{
+              marginBottom: 16,
+              background: "#FEF2F2",
+              border: "1px solid #FECACA",
+              borderRadius: 10,
+              padding: "10px 14px",
+              fontSize: 13,
+              color: "#B91C1C",
+            }}
+          >
             {error}
           </div>
         )}
         {loading ? (
-          <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: 32, textAlign: 'center', color: '#64748B', fontSize: 14 }}>
-            Loading client data...
+          <div
+            style={{
+              background: "#fff",
+              border: "1px solid #E2E8F0",
+              borderRadius: 12,
+              padding: 32,
+              textAlign: "center",
+              color: "#64748B",
+              fontSize: 14,
+            }}
+          >
+            Мэдээлэл ачаалж байна...
           </div>
         ) : clients.length === 0 && !error ? (
-          <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: 32, textAlign: 'center', color: '#64748B', fontSize: 14 }}>
-            No tracked client data is available yet.
+          <div
+            style={{
+              background: "#fff",
+              border: "1px solid #E2E8F0",
+              borderRadius: 12,
+              padding: 32,
+              textAlign: "center",
+              color: "#64748B",
+              fontSize: 14,
+            }}
+          >
+            Одоогоор өгөгдөл алга байна.
           </div>
         ) : (
           <>
-            {tab === 'dashboard' && <Dashboard clients={clients} history={history} onMarkDelivered={markDelivered} />}
-            {tab === 'clients' && <Clients initialClients={clients} />}
-            {tab === 'log' && <LogGift clients={clients} history={history} onLog={logGift} />}
-            {tab === 'marketing' && (
+            {tab === "dashboard" && (
+              <Dashboard
+                clients={clients}
+                history={history}
+                onOpenLogGift={openLogGiftForClient}
+              />
+            )}
+            {tab === "clients" && <Clients initialClients={clients} />}
+            {tab === "log" && (
+              <LogGift
+                clients={clients}
+                history={history}
+                marketingResources={marketingResources}
+                preselectedClientId={logClientId}
+                onLog={logGift}
+              />
+            )}
+            {tab === "marketing" && (
               <MarketingResources
                 initialResources={marketingResources}
                 initialIssues={marketingIssues}
@@ -282,7 +397,7 @@ export default function App() {
                 onUpdate={updateMarketingEntry}
               />
             )}
-            {tab === 'ai' && <AIAssistant clients={clients} />}
+            {tab === "ai" && <AIAssistant clients={clients} />}
           </>
         )}
       </div>

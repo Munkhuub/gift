@@ -19,7 +19,7 @@ async function request(path, options = {}) {
     const message =
       payload?.error ||
       fallbackText ||
-      `Request failed with status ${response.status}.`;
+      `${response.status} төлөвтэй хүсэлт амжилтгүй боллоо.`;
     const error = new Error(message);
     error.status = response.status;
     throw error;
@@ -113,4 +113,12 @@ export async function issueMarketingResource(issue) {
     body: JSON.stringify(issue),
   });
   return payload;
+}
+
+export async function updateClient(id, updates) {
+  const payload = await request(`/api/clients/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(updates || {}),
+  });
+  return payload.client;
 }
