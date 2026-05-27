@@ -377,7 +377,18 @@ export default function App() {
                 onOpenLogGift={openLogGiftForClient}
               />
             )}
-            {tab === "clients" && <Clients initialClients={clients} />}
+            {tab === "clients" && (
+              <Clients
+                initialClients={clients}
+                onClientUpdate={(updated) =>
+                  setClients((current) =>
+                    current.map((client) =>
+                      client.id === updated.id ? updated : client,
+                    ),
+                  )
+                }
+              />
+            )}
             {tab === "log" && (
               <LogGift
                 clients={clients}

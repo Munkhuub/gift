@@ -663,13 +663,61 @@ export async function logGiftDelivery({
     quantity,
   }));
 
-  try {
-    const updated = await prisma.$transaction(async (tx) => {
-      const deliveredAt = toDate(giftDate) || new Date();
-      const clientName = `${existing.lastName} ${existing.firstName}`.trim();
+  const selectedItemIds = mergedItems.map((entry) => entry.itemId);
+  const selectedInventoryItems =
+    selectedItemIds.length > 0
+      ? await prisma.marketingMerchItem.findMany({
+          where: {
+            id: {
+              in: selectedItemIds,
+            },
+          },
+          select: {
+            id: true,
+            name: true,
+            totalStock: true,
+            issuedStock: true,
+          },
+        })
+      : [];
 
-      // 1) Deduct from marketing inventory & write issue audit rows.
-      let inventoryNames = [];
+  const inventoryById = new Map(
+    selectedInventoryItems.map((item) => [Number(item.id), item]),
+  );
+
+  for (const entry of mergedItems) {
+    const item = inventoryById.get(entry.itemId);
+
+    if (!item) {
+      return { error: "Сонгосон мерч олдсонгүй." };
+    }
+
+    const remaining = Math.max(
+      Number(item.totalStock || 0) - Number(item.issuedStock || 0),
+      0,
+    );
+
+    if (entry.quantity > remaining) {
+      return {
+        error: `${item.name}: үлдэгдэл хүрэлцэхгүй байна (үлдсэн: ${remaining}).`,
+      };
+    }
+  }
+
+  try {
+    const deliveredAt = toDate(giftDate) || new Date();
+    const clientName = `${existing.lastName} ${existing.firstName}`.trim();
+    const resolvedGiftType =
+      giftType ||
+      mergedItems
+        .map((entry) => inventoryById.get(entry.itemId)?.name || "")
+        .filter(Boolean)
+        .join(" • ") ||
+      "Gift delivery";
+
+    const updated = await prisma.$transaction(async (tx) => {
+      // Deduct inventory first; if any row is already consumed by another
+      // request, abort before writing delivery history.
       if (mergedItems.length > 0) {
         for (const entry of mergedItems) {
           const lockedRows = await tx.$queryRaw(
@@ -678,46 +726,31 @@ export async function logGiftDelivery({
               SET "issuedStock" = "issuedStock" + ${entry.quantity}
               WHERE "id" = ${entry.itemId}
                 AND ("totalStock" - "issuedStock") >= ${entry.quantity}
-              RETURNING "id", "name", "category"
+              RETURNING "id"
             `,
           );
 
           if (!Array.isArray(lockedRows) || lockedRows.length === 0) {
-            const latest = await tx.marketingMerchItem.findUnique({
-              where: { id: entry.itemId },
-              select: { name: true, totalStock: true, issuedStock: true },
-            });
-            const remaining = latest
-              ? Math.max(latest.totalStock - latest.issuedStock, 0)
-              : 0;
-            const itemName = latest?.name || "Merch item";
-            throw new Error(`${itemName}: үлдэгдэл хүрэлцэхгүй байна (үлдсэн: ${remaining}).`);
+            const itemName =
+              inventoryById.get(entry.itemId)?.name || "Merch item";
+            throw new Error(`${itemName}: үлдэгдэл хүрэлцэхгүй байна.`);
           }
-
-          const row = lockedRows[0];
-          inventoryNames.push(row?.name || "");
-
-          await tx.marketingMerchIssue.create({
-            data: {
-              itemId: entry.itemId,
-              quantity: entry.quantity,
-              recipientName: clientName,
-              purpose: "VIP бэлэг хүргэлт",
-              issuedBy: staffName?.trim() || "",
-              issuedAt: deliveredAt,
-              note: clientNote?.trim()
-                ? `clientId=${id} • ${clientNote.trim()}`
-                : `clientId=${id}`,
-            },
-          });
         }
-      }
 
-      // 2) Create gift log + update client status.
-      const resolvedGiftType =
-        giftType ||
-        inventoryNames.filter(Boolean).join(" • ") ||
-        "Gift delivery";
+        await tx.marketingMerchIssue.createMany({
+          data: mergedItems.map((entry) => ({
+            itemId: entry.itemId,
+            quantity: entry.quantity,
+            recipientName: clientName,
+            purpose: "VIP бэлэг хүргэлт",
+            issuedBy: staffName?.trim() || "",
+            issuedAt: deliveredAt,
+            note: clientNote?.trim()
+              ? `clientId=${id} • ${clientNote.trim()}`
+              : `clientId=${id}`,
+          })),
+        });
+      }
 
       await tx.giftLog.create({
         data: {
@@ -744,6 +777,9 @@ export async function logGiftDelivery({
       });
 
       return clientRow;
+    }, {
+      maxWait: 10_000,
+      timeout: 20_000,
     });
 
     return { client: mapPrismaClient(updated) };

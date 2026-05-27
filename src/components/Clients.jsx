@@ -101,7 +101,7 @@ function StatCard({ label, value, color }) {
   );
 }
 
-export default function Clients({ initialClients }) {
+export default function Clients({ initialClients, onClientUpdate }) {
   const [clients, setClients] = useState(initialClients);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -202,6 +202,7 @@ export default function Clients({ initialClients }) {
       setClients((current) =>
         current.map((c) => (c.id === updated.id ? updated : c)),
       );
+      onClientUpdate?.(updated);
       closePickupEditor();
     } catch (e) {
       setError(e.message || "Төлөв шинэчилж чадсангүй.");
@@ -605,6 +606,11 @@ export default function Clients({ initialClients }) {
                   {c.pickupNotifiedAt ? (
                     <div style={{ marginTop: 4, fontSize: 10, color: "#94A3B8" }}>
                       {c.pickupNotifiedAt}
+                    </div>
+                  ) : null}
+                  {c.pickupNotified && c.pickupCenter ? (
+                    <div style={{ marginTop: 4, fontSize: 10, color: "#64748B" }}>
+                      {c.pickupCenter}
                     </div>
                   ) : null}
                 </td>
