@@ -1,4 +1,10 @@
-import { startTransition, useDeferredValue, useEffect, useMemo, useState } from "react";
+import {
+  startTransition,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { fetchClients, updateClient } from "../lib/api";
 
 const tierColors = {
@@ -14,7 +20,7 @@ const tierColors = {
 const SMART_FILTERS = [
   {
     key: "AT_RISK",
-    label: "⚠️ Бэлэг эрсдэлтэй",
+    label: "⚠️ Бэлгээ аваагүй хасагдсан",
     color: {
       bg: "#FEF2F2",
       text: "#B91C1C",
@@ -25,28 +31,16 @@ const SMART_FILTERS = [
     test: (c) => c.previousTier === "GOD" && c.tier !== "GOD" && !c.giftDone,
   },
   {
-    key: "WAITLIST",
-    label: "🆕 Waitlist-ээс GOD",
-    color: {
-      bg: "#F0FDF4",
-      text: "#15803D",
-      border: "#BBF7D0",
-      active: "#15803D",
-    },
-    tooltip: "Waitlist-ээс шинээр GOD болсон, бэлэг хараахан олгоогүй",
-    test: (c) => c.isWaitlist && c.tier === "GOD" && !c.giftDone,
-  },
-  {
     key: "PENDING",
-    label: "⏳ Хүргэгдээгүй",
+    label: "⏳ Бэлгээ аваагүй",
     color: {
       bg: "#F8FAFC",
       text: "#475569",
       border: "#CBD5E1",
       active: "#475569",
     },
-    tooltip: "Бэлэг хараахан хүргэгдээгүй",
-    test: (c) => !c.giftDone,
+    tooltip: "Бэлгийн үүрэг нээлттэй, хараахан аваагүй",
+    test: (c) => c.giftStillOwed && !c.giftDone,
   },
   {
     key: "DELIVERED",
@@ -162,9 +156,10 @@ export default function Clients({ initialClients, onClientUpdate }) {
 
   // ─── Stats (always from full clients list, not filtered) ──────────────────
   const atRiskDef = SMART_FILTERS.find((f) => f.key === "AT_RISK");
-  const waitlistDef = SMART_FILTERS.find((f) => f.key === "WAITLIST");
   const atRiskCount = atRiskDef ? clients.filter(atRiskDef.test).length : 0;
-  const waitlistCount = waitlistDef ? clients.filter(waitlistDef.test).length : 0;
+  const pendingCount = clients.filter(
+    (c) => c.giftStillOwed && !c.giftDone,
+  ).length;
   const deliveredCount = clients.filter((c) => c.giftDone).length;
   const hasFilters = smartFilter || deferredSearch || giftDate;
 
@@ -257,65 +252,18 @@ export default function Clients({ initialClients, onClientUpdate }) {
         </div>
       )}
 
-      {/* ── Waitlist Alert Banner ── */}
-      {waitlistCount > 0 && (
-        <div
-          style={{
-            background: "#F0FDF4",
-            border: "1px solid #BBF7D0",
-            borderRadius: 10,
-            padding: "10px 14px",
-            fontSize: 12,
-            color: "#15803D",
-            display: "flex",
-            gap: 10,
-            alignItems: "center",
-            marginBottom: 14,
-            justifyContent: "space-between",
-          }}
-        >
-          <span>
-            🆕{" "}
-            <strong>
-              {waitlistCount} new GOD client{waitlistCount > 1 ? "s" : ""}
-            </strong>{" "}
-            waitlist-ээс GOD болсон — бэлэг хараахан олгоогүй.
-          </span>
-          <button
-            onClick={() => setSmartFilter("WAITLIST")}
-            style={{
-              fontSize: 11,
-              padding: "4px 12px",
-              borderRadius: 99,
-              border: "1px solid #BBF7D0",
-              background: "#fff",
-              color: "#15803D",
-              cursor: "pointer",
-              fontWeight: 600,
-              whiteSpace: "nowrap",
-            }}
-          >
-            Харах →
-          </button>
-        </div>
-      )}
-
       {/* ── Stats Row ── */}
       <div
         style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}
       >
+        <StatCard label="Нийт" value={clients.length} color="#1E293B" />
+        <StatCard label="Өгсөн" value={deliveredCount} color="#15803D" />
         <StatCard
-          label="Нийт"
-          value={clients.length}
-          color="#1E293B"
+          label="Бэлгээ аваагүй хасагдсан"
+          value={atRiskCount}
+          color="#B91C1C"
         />
-        <StatCard
-          label="Хүргэгдсэн"
-          value={deliveredCount}
-          color="#15803D"
-        />
-        <StatCard label="Эрсдэлтэй" value={atRiskCount} color="#B91C1C" />
-        <StatCard label="Waitlist GOD" value={waitlistCount} color="#0369A1" />
+        <StatCard label="Бэлгээ аваагүй" value={pendingCount} color="#D97706" />
       </div>
 
       {/* ── Ухаалаг шүүлтүүр ── */}
@@ -478,13 +426,10 @@ export default function Clients({ initialClients, onClientUpdate }) {
           {filtered.map((c, i) => {
             const wasGodDowngraded =
               c.previousTier === "GOD" && c.tier !== "GOD";
-            const isWaitlistNew = c.isWaitlist && c.tier === "GOD";
             const rowBg =
               wasGodDowngraded && !c.giftDone
                 ? "#FFFBEB"
-                : isWaitlistNew
-                  ? "#F0FDF4"
-                  : "transparent";
+                : "transparent";
 
             return (
               <tr
@@ -509,18 +454,6 @@ export default function Clients({ initialClients, onClientUpdate }) {
                 </td>
                 <td style={{ padding: "11px 10px" }}>
                   <TierBadge tier={c.tier} />
-                  {isWaitlistNew && (
-                    <span
-                      style={{
-                        fontSize: 10,
-                        marginLeft: 4,
-                        color: "#15803D",
-                        fontWeight: 600,
-                      }}
-                    >
-                      NEW
-                    </span>
-                  )}
                 </td>
 
                 {/* Gift status */}
@@ -604,12 +537,16 @@ export default function Clients({ initialClients, onClientUpdate }) {
                     {c.pickupNotified ? "📞 Тийм" : "Засах…"}
                   </button>
                   {c.pickupNotifiedAt ? (
-                    <div style={{ marginTop: 4, fontSize: 10, color: "#94A3B8" }}>
+                    <div
+                      style={{ marginTop: 4, fontSize: 10, color: "#94A3B8" }}
+                    >
                       {c.pickupNotifiedAt}
                     </div>
                   ) : null}
                   {c.pickupNotified && c.pickupCenter ? (
-                    <div style={{ marginTop: 4, fontSize: 10, color: "#64748B" }}>
+                    <div
+                      style={{ marginTop: 4, fontSize: 10, color: "#64748B" }}
+                    >
                       {c.pickupCenter}
                     </div>
                   ) : null}
@@ -714,7 +651,8 @@ export default function Clients({ initialClients, onClientUpdate }) {
                       ...d,
                       pickupNotified: e.target.checked,
                       pickupNotifiedAt: e.target.checked
-                        ? d.pickupNotifiedAt || new Date().toISOString().slice(0, 10)
+                        ? d.pickupNotifiedAt ||
+                          new Date().toISOString().slice(0, 10)
                         : "",
                     }))
                   }
@@ -732,13 +670,18 @@ export default function Clients({ initialClients, onClientUpdate }) {
               }}
             >
               <div>
-                <div style={{ fontSize: 12, color: "#64748B", marginBottom: 6 }}>
+                <div
+                  style={{ fontSize: 12, color: "#64748B", marginBottom: 6 }}
+                >
                   Очих төв
                 </div>
                 <input
                   value={pickupDraft.pickupCenter}
                   onChange={(e) =>
-                    setPickupDraft((d) => ({ ...d, pickupCenter: e.target.value }))
+                    setPickupDraft((d) => ({
+                      ...d,
+                      pickupCenter: e.target.value,
+                    }))
                   }
                   placeholder="Мөнгөн Завьяа зээлийн төв"
                   style={{
@@ -754,14 +697,19 @@ export default function Clients({ initialClients, onClientUpdate }) {
                 />
               </div>
               <div>
-                <div style={{ fontSize: 12, color: "#64748B", marginBottom: 6 }}>
+                <div
+                  style={{ fontSize: 12, color: "#64748B", marginBottom: 6 }}
+                >
                   Огноо
                 </div>
                 <input
                   type="date"
                   value={pickupDraft.pickupNotifiedAt || ""}
                   onChange={(e) =>
-                    setPickupDraft((d) => ({ ...d, pickupNotifiedAt: e.target.value }))
+                    setPickupDraft((d) => ({
+                      ...d,
+                      pickupNotifiedAt: e.target.value,
+                    }))
                   }
                   disabled={!pickupDraft.pickupNotified}
                   style={{
@@ -778,7 +726,14 @@ export default function Clients({ initialClients, onClientUpdate }) {
               </div>
             </div>
 
-            <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <div
+              style={{
+                marginTop: 16,
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 8,
+              }}
+            >
               <button
                 onClick={closePickupEditor}
                 style={{
@@ -804,7 +759,8 @@ export default function Clients({ initialClients, onClientUpdate }) {
                   border: "none",
                   background: "#1E293B",
                   color: "#fff",
-                  cursor: updatingId === editingClient.id ? "not-allowed" : "pointer",
+                  cursor:
+                    updatingId === editingClient.id ? "not-allowed" : "pointer",
                   fontWeight: 700,
                   opacity: updatingId === editingClient.id ? 0.7 : 1,
                 }}

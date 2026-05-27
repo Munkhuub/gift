@@ -13,10 +13,6 @@ function StatusBadge({ client }) {
     return badge("Өмнөх GOD • бэлэг дутуу", "#FEF2F2", "#B91C1C", "#FECACA");
   }
 
-  if (client.isWaitlist && client.tier === "GOD") {
-    return badge("Waitlist → GOD", "#F0FDF4", "#15803D", "#BBF7D0");
-  }
-
   if (client.giftDone) {
     return badge("Хүргэгдсэн", "#F0FDF4", "#15803D", "#BBF7D0");
   }
@@ -60,9 +56,6 @@ export default function Dashboard({ clients, history, onOpenLogGift }) {
         client.giftStillOwed &&
         !client.giftDone,
     );
-    const waitlistGod = clients.filter(
-      (client) => client.isWaitlist && client.tier === "GOD" && !client.giftDone,
-    );
     const recentChanges = clients
       .filter((client) => client.tierChangedAt)
       .sort((a, b) => b.tierChangedAt.localeCompare(a.tierChangedAt))
@@ -72,7 +65,6 @@ export default function Dashboard({ clients, history, onOpenLogGift }) {
       activeGod,
       owedQueue,
       formerGodOwed,
-      waitlistGod,
       recentChanges,
       delivered: clients.filter((client) => client.giftDone),
     };
@@ -182,8 +174,8 @@ export default function Dashboard({ clients, history, onOpenLogGift }) {
             GOD бэлгийн дарааллыг нэг дэлгэцээс хурдан шийдвэрлэх самбар
           </div>
           <div style={{ fontSize: 13, color: "#475569", lineHeight: 1.7 }}>
-            Нээлттэй бэлгийн үүрэг, эрсдэлтэй харилцагч, waitlist-ээс шинээр орж
-            ирсэн GOD хэрэглэгч, сүүлийн хүргэлтийн урсгалыг эндээс шууд харна.
+            Нээлттэй бэлгийн үүрэг, бэлгээ аваагүй харилцагч, эрсдэлтэй
+            кейсүүд, сүүлийн хүргэлтийн урсгалыг эндээс шууд харна.
           </div>
         </div>
 
@@ -226,9 +218,9 @@ export default function Dashboard({ clients, history, onOpenLogGift }) {
             color: "#1E293B",
           },
           {
-            label: "Нээлттэй дараалал",
+            label: "Бэлгээ аваагүй",
             value: metrics.owedQueue.length,
-            color: metrics.owedQueue.length > 0 ? "#DC2626" : "#16A34A",
+            color: metrics.owedQueue.length > 0 ? "#D97706" : "#16A34A",
           },
           {
             label: "Буусан ч бэлэг дутуу",
@@ -236,9 +228,9 @@ export default function Dashboard({ clients, history, onOpenLogGift }) {
             color: metrics.formerGodOwed.length > 0 ? "#B91C1C" : "#16A34A",
           },
           {
-            label: "Waitlist → GOD",
-            value: metrics.waitlistGod.length,
-            color: metrics.waitlistGod.length > 0 ? "#15803D" : "#64748B",
+            label: "Хүргэгдсэн",
+            value: metrics.delivered.length,
+            color: metrics.delivered.length > 0 ? "#15803D" : "#64748B",
           },
         ].map((metric) => (
           <div
